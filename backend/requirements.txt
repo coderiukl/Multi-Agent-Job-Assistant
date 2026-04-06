@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+langgraph
+langchain
+langchain-openai
+sqlalchemy
+alembic
+psycopg2-binary
+qdrant-client
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pypdf2
+python-dotenv
