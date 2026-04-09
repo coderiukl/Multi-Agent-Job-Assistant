@@ -53,7 +53,7 @@ Tải installer từ: https://github.com/UB-Mannheim/tesseract/wiki
 ### 1. Clone repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/coderiukl/Multi-Agent-Job-Assistant.git
 cd job-search-agent
 ```
 
