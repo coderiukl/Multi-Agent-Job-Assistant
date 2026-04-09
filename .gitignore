@@ -32,7 +32,7 @@ frontend/.vite/
 node_modules/
 
 # ── Data (file CSV lớn) ──
-data/VietJobs.csv
+backend/data/VietJobs.csv
 
 # ── Database ──
 *.db
@@ -55,3 +55,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+*.pdf
+uploads/
