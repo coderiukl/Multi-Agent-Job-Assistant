@@ -3,7 +3,9 @@ uvicorn[standard]
 langgraph
 langchain
 langchain-openai
-sqlalchemy
+sentence-transformers
+sqlalchemy[asyncio]
+asyncpg
 alembic
 psycopg2-binary
 qdrant-client
@@ -11,5 +13,10 @@ pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-pypdf2
+pypdf
+python-docx
+pytesseract
+Pillow
+PyMupdf
 python-dotenv
+email-validator
