@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-import uuid
+from typing import Any
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
     PointStruct,
     VectorParams
 )
@@ -14,7 +17,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = "cv_chunks"
+CV_COLLECTION_NAME = "cv_chunks"
+JOBS_COLLECTION_NAME = "jobs"
 VECTOR_SIZE = 1024
 
 def get_qdrant_client() -> AsyncQdrantClient:
@@ -31,35 +35,53 @@ async def ensure_collection() -> None:
     existing = await client.get_collections()
     names = [c.name for c in existing.collections]
 
-    if COLLECTION_NAME not in names:
+    for collection_name in (CV_COLLECTION_NAME, JOBS_COLLECTION_NAME):
+        if collection_name in names:
+            logger.info("Qdrant collection already exists: %s", collection_name)
+            continue
+
         await client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=VECTOR_SIZE,
-                distance=Distance.COSINE
-            ),
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
-        logger.info("Created Qdrant collection: %s", COLLECTION_NAME)
-    else:
-        logger.info("Collection already exists: %s", COLLECTION_NAME)
+        logger.info("Created Qdrant collection: %s", collection_name)
 
-async def upsert_chunks(chunks: list[dict]) -> list[str]:
+async def upsert_job_chunks(jobs: list[dict]) -> list[str]:
     client = get_qdrant_client()
-
     points = [
         PointStruct(
-            id = chunk["chunk_db_id"],
+            id=str(job["job_db_id"]),
+            vector=job["vector"],
+            payload={
+                "job_db_id": str(job["job_db_id"]),
+                "title":     job["title"],
+                "company":   job.get("company"),
+                "location":  job.get("location"),
+                "source":    job.get("source"),
+                "url":       job["url"],
+            },
+        )
+        for job in jobs
+    ]
+    await client.upsert(collection_name=JOBS_COLLECTION_NAME, points=points)
+    return [job["job_db_id"] for job in jobs]
+
+
+async def upsert_cv_chunks(chunks: list[dict[str, Any]]) -> list[str]:
+    client = get_qdrant_client()
+    points = [
+        PointStruct(
+            id=str(chunk["chunk_db_id"]),
             vector=chunk["vector"],
             payload={
-                "file_id": chunk["file_id"],
+                "file_id":     chunk["file_id"],
                 "chunk_index": chunk["chunk_index"],
-                "content": chunk['content']
+                "content":     chunk["content"],
             },
         )
         for chunk in chunks
     ]
-
-    await client.upsert(collection_name=COLLECTION_NAME, points=points)
+    await client.upsert(collection_name=CV_COLLECTION_NAME, points=points)
     return [chunk["chunk_db_id"] for chunk in chunks]
 
 async def search_similar(vector: list[float], top_k: int = 10, file_id_filter: str | None = None) -> list[dict]:
@@ -76,10 +98,11 @@ async def search_similar(vector: list[float], top_k: int = 10, file_id_filter: s
             )]
         )
     
-    results = await client.search(
-        collection_name = COLLECTION_NAME,
-        query_vector=vector,
+    response = await client.query_points(
+        collection_name = CV_COLLECTION_NAME,
+        query=vector,
         limit=top_k,
+        query_filter=query_filter,
         with_payload=True,
     )
 
@@ -91,5 +114,5 @@ async def search_similar(vector: list[float], top_k: int = 10, file_id_filter: s
             "file_id": hit.payload.get("file_id", ""),
             "chunk_index": hit.payload.get("chunk_index", 0),
         }
-        for hit in results
+        for hit in response.points
     ]

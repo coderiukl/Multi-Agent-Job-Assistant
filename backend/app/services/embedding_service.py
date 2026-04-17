@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.models import FileChunk
-from app.services.qdrant_services import upsert_chunks
+from app.services.qdrant_services import upsert_cv_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ async def embed_file(file_id: uuid.UUID, db: AsyncSession) -> int:
     vectores = model.encode(texts, batch_size=32, show_progress_bar=False)
 
     # 3. upsert vào Qdrant, nhận lại point_ids
-    point_ids = await upsert_chunks(
+    point_ids = await upsert_cv_chunks(
         chunks=[
             {
                 "chunk_db_id": str(chunk.id),

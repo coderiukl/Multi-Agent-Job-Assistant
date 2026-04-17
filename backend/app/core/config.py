@@ -12,8 +12,10 @@ class Settings(BaseSettings):
     postgres_user: Optional[str] = None
     postgres_password: Optional[str] = None
     postgres_db: Optional[str] = None
-    redis_url: Optional[str] = None
-
+    REDIS_URL: Optional[str] = None
+    GEMINI_MODEL: str
+    GEMINI_API_KEY: str
+    EMBEDDING_MODEL: str
     class Config:
         env_file = ".env"
         extra = "ignore"

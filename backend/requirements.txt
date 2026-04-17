@@ -20,3 +20,4 @@ Pillow
 PyMupdf
 python-dotenv
 email-validator
+tavily-python

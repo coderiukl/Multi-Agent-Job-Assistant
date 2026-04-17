@@ -23,18 +23,23 @@ class CvVsJdResponse(BaseModel):
 class JobMatchResult(BaseModel):
     id: str
     title: str
-    company: Optional[str]
-    location: Optional[str]
-    country: Optional[str]
-    category: Optional[str]
-    contract_type: Optional[str]
-    salary_min: Optional[int]
-    salary_max: Optional[int]
-    salary_avg: Optional[float]
-    salary_raw: Optional[str]
-    technical_skills: Optional[str]
-    experience_required: Optional[str]
-    languages_required: Optional[str]
-    url: str
-    source: Optional[str]
+    company: Optional[str] = None
+    location: Optional[str] = None
+    country: Optional[str] = None
+    category: Optional[str] = None
+    contract_type: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    salary_avg: Optional[float] = None
+    salary_raw: Optional[str] = None
+    technical_skills: Optional[str] = None
+    experience_required: Optional[str] = None
+    languages_required: Optional[str] = None
+    url: str 
+    source: Optional[str] = None
     score: float
+
+class MatchResponse(BaseModel):
+    cv_id: uuid.UUID
+    total: int
+    results: list[JobMatchResult]

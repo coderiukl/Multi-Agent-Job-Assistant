@@ -173,7 +173,6 @@ async def upsert_jobs(session: AsyncSession, job_dicts: list[dict]) -> tuple[int
         job = Job(
             id=uuid.uuid4(),
             title=d["title"],
-            company=d.get("company") or None,
             location=d.get("location"),
             country=d.get("country"),
             category=d.get("category"),
@@ -225,7 +224,7 @@ async def embed_jobs(session: AsyncSession, batch_size: int = 32) -> int:
     jobs = (await session.execute(
         select(Job)
         .where(Job.qdrant_point_id.is_(None))
-        .where(Job.is_active == True)
+        .where(Job.is_active.is_True)
     )).scalars().all()
 
     if not jobs:

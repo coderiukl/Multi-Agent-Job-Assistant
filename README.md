@@ -1,318 +1,326 @@
-# Job Search Agent - Multi-Agent Job Assistant System
+# 🚀 Job Search Agent - Multi-Agent Job Assistant System
 
-Hệ thống hỗ trợ tìm kiếm việc làm tích hợp AI, sử dụng vector embeddings để so khớp CV với các công việc phù hợp.
-
-## 📋 Tổng quan
-
-**Job Search Agent** là một nền tảng giúp:
-- 📄 **Parse CV** từ các định dạng khác nhau (PDF, DOCX, Text)
-- 🔍 **Tìm kiếm việc làm** dựa trên so khớp semantic (embedding)
-- 🤖 **Multi-Agent System** để xây dựng hồ sơ ứng tuyển tối ưu
-- 👤 **Quản lý tài khoản** người dùng với xác thực JWT
-
-### Tech Stack
-
-- **Backend**: FastAPI + SQLAlchemy (async)
-- **Database**: PostgreSQL (với Alembic migrations)
-- **Vector DB**: Qdrant (semantic search)
-- **Cache**: Redis
-- **AI/ML**: Sentence-Transformers, LangChain, LangGraph
-- **OCR**: Tesseract (để trích xuất text từ PDF)
-- **Container**: Docker Compose
+Hệ thống AI hỗ trợ tìm kiếm việc làm thông minh, sử dụng **Multi-Agent + Vector Search (RAG)** để kết nối CV với job phù hợp.
 
 ---
 
-## ✅ Yêu cầu
+## 🧠 Kiến trúc hệ thống (System Architecture)
 
-Trước khi bắt đầu, cần cài đặt:
+Hệ thống được thiết kế theo mô hình **Multi-Agent Pipeline**:
 
-- **Docker & Docker Compose** (phiên bản mới nhất)
-- **Python 3.10+**
-- **Tesseract OCR** (nếu chạy local mà không dùng container)
-- **Git**
-
-### Cài Tesseract (Tùy chọn - nếu chạy local)
-
-**macOS:**
-```bash
-brew install tesseract
 ```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install tesseract-ocr libtesseract-dev
+User Input (CV / Query)
+        ↓
+   Router Agent
+        ↓
+ ┌───────────────┬────────────────┐
+ │               │                │
+CV Parser   Job Matcher      Web Scraper (future)
+ │               │
+ ↓               ↓
+Embedding      Vector Search (Qdrant)
+ │               │
+ └──────→ Ranking + Filtering
+                ↓
+           Final Response
 ```
-
-**Windows:**
-Tải installer từ: https://github.com/UB-Mannheim/tesseract/wiki
 
 ---
 
-## 🚀 Hướng dẫn Setup
+## ⚙️ Core Features
 
-### 1. Clone repository
+* 📄 **CV Parsing Agent**
+
+  * Trích xuất thông tin từ PDF / DOCX / Text
+  * OCR với Tesseract nếu cần
+
+* 🔍 **Job Matching Agent**
+
+  * So khớp CV với job bằng embeddings
+  * Hybrid search (Vector + Metadata)
+
+* 🤖 **Multi-Agent Orchestration**
+
+  * Sử dụng LangGraph để điều phối flow
+  * Dễ mở rộng thêm agent mới
+
+* 🧠 **Semantic Search**
+
+  * Qdrant vector database
+  * Embedding đa ngôn ngữ (EN + VI)
+
+* 👤 **Authentication**
+
+  * JWT-based login/register
+
+---
+
+## 🧩 Tech Stack
+
+| Thành phần    | Công nghệ                      |
+| ------------- | ------------------------------ |
+| Backend       | FastAPI                        |
+| Orchestration | LangGraph + LangChain          |
+| Database      | PostgreSQL                     |
+| Vector DB     | Qdrant                         |
+| Cache         | Redis                          |
+| Embedding     | Sentence Transformers / BGE-M3 |
+| OCR           | Tesseract                      |
+| Deployment    | Docker Compose                 |
+
+---
+
+## 🔄 Data Flow
+
+### 1. Upload CV
+
+```text
+User → API → CV Parser → Clean Text → Embedding → Qdrant
+```
+
+### 2. Job Matching
+
+```text
+User Query → Embedding → Qdrant Search → Ranking → Response
+```
+
+### 3. Hybrid Matching
+
+```text
+Vector Search (Qdrant)
+        +
+Metadata Filter (Postgres)
+        ↓
+Final Jobs
+```
+
+---
+
+## 🗄️ Database Design
+
+### PostgreSQL (Relational)
+
+* Users
+* Conversations
+* Messages
+* Jobs (metadata)
+
+👉 Dùng để:
+
+* Lưu user & auth
+* Lưu lịch sử chat
+* Lọc job theo metadata
+
+---
+
+### Qdrant (Vector DB)
+
+* Lưu embeddings của:
+
+  * Jobs
+  * CV
+
+👉 Dùng để:
+
+* Semantic search
+* Similarity matching
+
+---
+
+## 📁 Project Structure
+
+```
+backend/
+├── app/
+│   ├── main.py
+│   │
+│   ├── core/
+|   |   ├── llm.py
+│   │   ├── cache.py
+│   │   ├── config.py
+│   │   ├── security.py
+│   │   └── dependencies.py
+│   │
+│   ├── db/
+│   │   ├── base.py
+│   │   └── models.py
+│   │
+│   ├── agents/                  # Multi-Agent Layer
+│   │   ├── state.py
+│   │   ├── intent.py
+│   │   ├── cv_advisor.py
+│   │   ├── matcher.py
+│   │   ├── responder.py
+│   │   └── workflow.py
+│   │
+│   ├── services/               # Business Logic
+│   │   ├── embedding_service.py
+│   │   ├── qdrant_services.py
+│   │   ├── job_matcher.py
+│   │   └── cv_parser.py
+│   │
+│   ├── routers/                # API Layer
+│   │   ├── auth.py
+│   │   ├── cv.py
+│   │   ├── conversation.py
+│   │   └── match.py
+│   │
+│   ├── schemas/
+│   │
+│   └── parsers/
+│       ├── pdf_parser.py
+│       ├── docx_parser.py
+│       ├── ocr_parser.py
+│       ├── cv_parser.py
+│       └── text_cleaner.py
+│
+├── scripts/
+│   └── seed_jobs.py
+│
+├── data/
+│   └── VietJobs.csv
+│
+├── uploads/
+│   └── cvs/
+│
+├── alembic/
+├── docker-compose.yml
+└── requirements.txt
+```
+
+---
+
+## 🤖 Multi-Agent Logic
+
+### Router Agent
+
+* Xác định intent của user:
+
+  * Upload CV → CV Agent
+  * Search job → Matcher Agent
+
+---
+
+### CV Agent
+
+* Parse CV
+* Extract:
+
+  * Skills
+  * Experience
+  * Education
+* Generate embedding
+
+---
+
+### Matcher Agent
+
+* Nhận:
+
+  * CV embedding hoặc query
+* Gọi:
+
+  * Qdrant search
+  * Postgres filter
+* Trả:
+
+  * Top jobs phù hợp
+
+---
+
+## 🚀 Setup & Run
+
+### 1. Clone project
 
 ```bash
 git clone https://github.com/coderiukl/Multi-Agent-Job-Assistant.git
 cd job-search-agent
 ```
 
-### 2. Tạo file `.env` trong folder `backend/`
+---
+
+### 2. Setup environment
 
 ```bash
 cd backend
-cp .env.example .env  # Nếu có file mẫu, hoặc tạo tay như dưới
+cp .env.example .env
 ```
 
-**Nội dung `.env`:**
-```env
-# Database
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5433/job_search_agent_db
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=password
-POSTGRES_DB=job_search_agent_db
+---
 
-# JWT Secret (tạo bằng: openssl rand -hex 32)
-SECRET_KEY=your-super-secret-key-here-min-32-chars
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Qdrant Vector DB
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-
-# Redis (tùy chọn)
-REDIS_URL=redis://localhost:6379/0
-```
-
-### 3. Khởi động Docker Compose
-
-Khởi động tất cả các services (PostgreSQL, Qdrant, Redis):
+### 3. Run Docker
 
 ```bash
 docker compose up -d
 ```
 
-Kiểm tra trạng thái:
-```bash
-docker compose ps
-```
+---
 
-Bạn sẽ thấy 3 containers:
-- `cv_postgres` (PostgreSQL port 5433)
-- `cv_qdrant` (Qdrant port 6333)
-- `cv_redis` (Redis port 6379)
-
-### 4. Cài đặt Python dependencies
+### 4. Install dependencies
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Trên Windows: venv\Scripts\activate
-
 pip install -r requirements.txt
 ```
 
-### 5. Chạy database migrations
+---
+
+### 5. Migrate DB
 
 ```bash
 alembic upgrade head
 ```
 
-Lệnh này sẽ tạo tất cả các bảng cần thiết trong PostgreSQL.
+---
 
-### 6. (Tùy chọn) Seed dữ liệu việc làm
-
-Nếu có file CSV chứa dữ liệu job:
+### 6. Seed data
 
 ```bash
-python -m scripts.seed_jobs --file data/VietJob.csv
+python -m scripts.seed_jobs --file data/VietJobs.csv
 ```
 
-Hoặc nếu chỉ muốn test với một số lượng giới hạn:
-```bash
-python -m scripts.seed_jobs --file data/VietJob.csv --limit 50
-```
+---
 
-Script này sẽ:
-- Đọc dữ liệu từ CSV
-- Inject vào PostgreSQL
-- Tạo embeddings và lưu vào Qdrant
-
-### 7. Khởi động API server
+### 7. Run server
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-API sẽ chạy tại: **http://localhost:8000**
+---
 
-Truy cập Swagger UI: **http://localhost:8000/docs**
+## 🔍 API Docs
+
+* Swagger: http://localhost:8000/docs
 
 ---
 
-## 📁 Cấu trúc Project
+## 🧪 Example Use Cases
 
-```
-backend/
-├── app/
-│   ├── main.py                 # Entry point của FastAPI
-│   ├── core/
-│   │   ├── config.py          # Cấu hình từ .env
-│   │   ├── dependencies.py    # Database session, auth dependencies
-│   │   └── security.py        # JWT token utils
-│   ├── db/
-│   │   ├── base.py            # SQLAlchemy declarative base
-│   │   └── models.py          # Job, User models
-│   ├── routers/               # API endpoints
-│   │   ├── auth.py            # Login, register
-│   │   ├── cv.py              # CV upload, parsing
-│   │   └── match.py           # Job matching
-│   ├── schemas/               # Pydantic request/response models
-│   ├── services/              # Business logic
-│   │   ├── embedding_service.py      # Sentence-Transformers
-│   │   ├── qdrant_services.py        # Vector DB operations
-│   │   ├── search_services.py        # Job search logic
-│   │   └── cv_parser.py              # CV parsing orchrestration
-│   └── parsers/               # File parsers
-│       ├── pdf_parser.py      # PDF extraction
-│       ├── docx_parser.py     # DOCX extraction
-│       ├── ocr_parser.py      # OCR with Tesseract
-│       └── text_cleaner.py    # Text preprocessing
-├── alembic/                   # Database migrations
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions/              # Migration files
-├── scripts/
-│   └── seed_jobs.py           # Load jobs from CSV
-├── data/
-│   └── VietJob.csv            # Sample job data
-├── uploads/
-│   └── cvs/                   # User uploaded CVs
-├── requirements.txt           # Python dependencies
-├── docker-compose.yml         # Container orchestration
-├── alembic.ini               # Alembic config
-└── .env                      # Environment variables (create locally)
-```
+### 1. Upload CV
+
+→ System phân tích CV → gợi ý job
+
+### 2. Chat với AI
+
+→ Hỏi:
+
+* "Tôi phù hợp công việc gì?"
+* "Cần học gì để làm backend?"
 
 ---
 
-## 🔧 Các CLI Commands
+## Future Improvements
 
-### Database
-
-```bash
-# Xem trạng thái hiện tại
-alembic current
-
-# Xem lịch sử các migrations
-alembic history
-
-# Tạo migration mới (sau khi thay đổi models)
-alembic revision --autogenerate -m "Mô tả thay đổi"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback 1 migration
-alembic downgrade -1
-```
-
-### API
-
-```bash
-# Chạy với auto-reload trong development
-uvicorn app.main:app --reload
-
-# Chạy production (không auto-reload)
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Chạy với Gunicorn (production)
-gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
-```
-
-### Data Loading
-
-```bash
-# Load jobs từ CSV vào DB
-python -m scripts.seed_jobs --file data/VietJob.csv
-
-# Test với 10 jobs
-python -m scripts.seed_jobs --file data/VietJob.csv --limit 10
-```
+* 🌐 Web scraping job realtime
+* 🧠 LLM reasoning (Gemini/OpenAI)
+* 📊 Ranking model learning
+* 🧾 CV optimization suggestions
+* 🔁 Feedback loop training
 
 ---
 
-## 🐳 Docker Commands
+## 📌 Notes
 
-```bash
-# Khởi động tất cả services
-docker compose up -d
+* Hệ thống hỗ trợ **đa ngôn ngữ (VI + EN)**
+* Embedding khuyến nghị: `bge-m3`
 
-# Xem logs
-docker compose logs -f postgres        # PostgreSQL logs
-docker compose logs -f qdrant          # Qdrant logs
-docker compose logs -f redis           # Redis logs
-
-# Dừng tất cả
-docker compose down
-
-# Xóa tất cả (bao gồm data)
-docker compose down -v
-
-# Rebuild images nếu có thay đổi
-docker compose build --no-cache
-```
-
-### Connect trực tiếp vào PostgreSQL
-
-```bash
-docker exec -it cv_postgres psql -U postgres -d job_search_agent_db
-
-# Sau đó có thể chạy SQL commands:
-\dt                           # List tables
-SELECT * FROM jobs LIMIT 5;   # Query jobs
-```
-
----
-
-## 🔍 Kiểm tra Health
-
-```bash
-# API health check
-curl http://localhost:8000/health
-
-# PostgreSQL (từ CLI)
-pg_isready -h localhost -p 5433
-
-# Qdrant health (từ browser)
-http://localhost:6333/health
-
-# Redis
-docker exec cv_redis redis-cli ping
-```
-
----
-
-## 📚 Thêm thông tin
-
-### Environment Variables
-
-| Variable | Mô tả | Mặc định |
-|----------|-------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | - |
-| `SECRET_KEY` | JWT signing key | - |
-| `QDRANT_HOST` | Qdrant server host | localhost |
-| `QDRANT_PORT` | Qdrant server port | 6333 |
-| `REDIS_URL` | Redis connection string | - |
-
-### Các Tư liệu tham khảo
-
-- [FastAPI Docs](https://fastapi.tiangolo.com/)
-- [SQLAlchemy Async](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
-- [Qdrant Python Client](https://github.com/qdrant/qdrant-client)
-- [Sentence-Transformers](https://www.sbert.net/)
-
----
-
-**Happy coding! 🎉**

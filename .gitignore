@@ -32,7 +32,7 @@ frontend/.vite/
 node_modules/
 
 # ── Data (file CSV lớn) ──
-backend/data/VietJobs.csv
+backend/data/
 
 # ── Database ──
 *.db
