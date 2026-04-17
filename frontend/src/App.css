@@ -1,0 +1,169 @@
+/* Job score badge */
+.job-score-badge {
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Skill tags */
+.job-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.skill-tag {
+  background: #f0f4ff;
+  color: #3a5bd0;
+  font-size: 0.75rem;
+  padding: 3px 9px;
+  border-radius: 12px;
+  border: 1px solid #c7d4f8;
+}
+
+/* Jobs loading */
+.jobs-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  color: #666;
+  font-size: 0.9rem;
+}
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ddd;
+  border-top-color: #555;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Result count */
+.result-count {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #888;
+  margin-left: 8px;
+}
+
+/* CV badge in header */
+.chat-header-cv-badge {
+  font-size: 0.8rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+/* Sidebar upload area */
+.cv-upload-area { margin-top: 8px; }
+.upload-cv-btn {
+  width: 100%;
+  padding: 8px;
+  border: 1.5px dashed #ccc;
+  border-radius: 8px;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+.upload-cv-btn:hover { border-color: #888; color: #333; }
+
+.cv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.cv-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #444;
+  transition: background 0.15s;
+}
+.cv-item:hover { background: #f0f0f0; }
+.cv-item.active { background: #e8f0fe; color: #1a56db; font-weight: 500; }
+.cv-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.file-preview-mini {
+  background: #f8f8f8;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.file-preview-name {
+  font-size: 0.8rem;
+  color: #444;
+  display: block;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-preview-actions { display: flex; gap: 6px; }
+
+.small-btn { padding: 4px 10px !important; font-size: 0.8rem !important; }
+.ghost-btn {
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #666;
+}
+.ghost-btn:hover { background: #f0f0f0; }
+
+/* Empty sidebar */
+.empty-sidebar-hint {
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: center;
+  padding: 12px;
+}
+
+/* AI avatar distinct from user */
+.ai-avatar {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Markdown in messages */
+.message-text p { margin: 0 0 0.5em; }
+.message-text ul, .message-text ol { padding-left: 1.4em; margin: 0.4em 0; }
+.message-text li { margin-bottom: 0.25em; }
+.message-text strong { font-weight: 600; }
+.message-text code {
+  background: #f0f0f0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.message-text pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 12px 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
