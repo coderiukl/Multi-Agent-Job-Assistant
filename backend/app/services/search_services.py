@@ -95,9 +95,9 @@ async def find_matching_jobs(cv_file_id:str, db: AsyncSession, top_k: int = 20) 
     
     # 3. Lấy pg_job_id từ payload
     job_id_score_map = {
-        hit.payload.get("pg_job_id"): hit.score
+        hit.payload.get("job_db_id"): hit.score
         for hit in results
-        if hit.payload.get("pg_job_id")
+        if hit.payload.get("job_db_id")
     }
 
     if not job_id_score_map:

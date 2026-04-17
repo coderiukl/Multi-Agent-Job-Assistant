@@ -7,7 +7,7 @@ from app.db.base import AsyncSessionLocal
 from app.db.models import Job
 from app.services.embedding_service import _get_model
 from app.services.qdrant_services import upsert_job_chunks
-from app.services.scrapers.base import JobItem
+from app.services.scraper.base import JobItem
 
 logger = logging.getLogger(__name__)
 

@@ -67,7 +67,7 @@ class JobMatcherService:
         if cv_vector is None:
             return []
 
-        response = self.qdrant.query_points(
+        response = await self.qdrant.query_points(
             collection_name=JOBS_COLLECTION_NAME,
             query=cv_vector,
             limit=max(len(job_ids),1),
