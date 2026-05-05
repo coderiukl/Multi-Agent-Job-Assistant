@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 import fitz
 from fastapi import HTTPException, UploadFile
 
-from .pdf_extractor import PageResult, extract_pages, merge_page_results
-from .llm_extractor import extract_with_llm, normalize_llm_output
+from services.cv.pdf_extractor import PageResult, extract_pages, merge_page_results
+from services.llm_extractor import extract_with_llm, normalize_llm_output
 
-from .regex_parser import (
+from services.cv.regex_parser import (
     normalize_cv_text,
     extract_cv_details_regex,
     _extract_email,
@@ -66,6 +66,78 @@ async def process_cv_pdf(file: UploadFile) -> CvPdfResult:
     finally:
         document.close()
 
+def build_cv_embedding_documents(result):
+    details = result.details
+    documents = []
+
+    if details.get("summary"):
+        documents.append({
+            "field": "summary",
+            "text": details['summary'],
+        })
+    
+    if details.get("skills"):
+        skill_text_parts = []
+
+        for group_name, skills in details['skills'].items():
+            skill_text_parts.append(f"{group_name}: {', '.join(skills)}")
+        
+        skill_text = "\n".join(skill_text_parts)
+
+        if skill_text.strip():
+            documents.append({
+                "field": "skills",
+                "text": skill_text,
+            })
+
+    for index, exp in enumerate(details.get("work_experience", [])):
+        text = "\n".join([
+            exp.get("title") or "",
+            exp.get("company") or "",
+            exp.get("date") or "",
+            "\n".join(exp.get("responsibilities", [])),
+        ]).strip()
+
+        if text:
+            documents.append({
+                "field": "work_experience",
+                "index": index,
+                "text": text,
+            })
+    
+    for index, project in enumerate(details.get("projects", [])):
+        text = "\n".join([
+            project.get("title") or "",
+            project.get("date") or "",
+            ", ".join(project.get("tools", [])),
+            "\n".join(project.get("descriptions", [])),
+        ]).strip()
+
+        if text:
+            documents.append({
+                "field": "projects",
+                "index": index,
+                "text": text,
+            })
+    
+    for index, edu in enumerate(details.get("education", [])):
+        text = "\n".join([
+            edu.get("school") or "",
+            edu.get("degree") or "",
+            edu.get("major") or "",
+            edu.get("date") or "",
+            "\n".join(edu.get("descriptions", []))
+        ]).strip()
+
+        if text:
+            documents.append({
+                "field": "education",
+                "index": index,
+                "text": text,
+            })
+    
+    return documents
+
 def _extract_details(text: str) -> dict:
     """LLM → fallback regex."""
     if USE_LLM:
@@ -93,7 +165,7 @@ def _unload_ollama_model() -> None:
     """
     try:
         import requests
-        from .llm_extractor import OLLAMA_BASE_URL, OLLAMA_MODEL
+        from ..llm_extractor import OLLAMA_BASE_URL, OLLAMA_MODEL
         requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={

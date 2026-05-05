@@ -7,3 +7,4 @@ pytesseract
 PyMuPDF
 sentence_transformers
 qdrant-client
+fastembed

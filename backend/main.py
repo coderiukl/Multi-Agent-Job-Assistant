@@ -2,14 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routes.cv_route import router as cv_router
+from routes.jd_route import router as jd_router
 
 from services.qdrant_service import QdrantService
-from services.embedding_service import EmbeddingService
+from services.embedding_service import EmbeddingService, SparseEmbeddingService
 
 async def lifespan(app: FastAPI):
     embedding_service = EmbeddingService(
         model_name="BAAI/bge-m3",
         normalize_embeddings=True,
+    )
+
+    sparse_embedding_service = SparseEmbeddingService(
+        model_name="Qdrant/bm25",
     )
 
     qdrant_service = QdrantService(
@@ -19,6 +24,7 @@ async def lifespan(app: FastAPI):
     )
 
     app.state.embedding_service = embedding_service
+    app.state.sparse_embedding_service = sparse_embedding_service
     app.state.qdrant_service = qdrant_service
 
     yield
@@ -38,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(cv_router)
+app.include_router(jd_router)
 
 @app.get("/")
 async def health_check():

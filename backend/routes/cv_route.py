@@ -1,82 +1,52 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException, Request
-from services.cv.cv_service import process_cv_pdf
+from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+from services.cv.cv_service import process_cv_pdf, build_cv_embedding_documents
+
+from uuid import uuid4 
 
 router = APIRouter(prefix="/cv", tags=["CV"])
 
-def build_cv_embedding_documents(result):
-    details = result.details
-    documents = []
+def _build_filter(filters: dict) -> Filter:
+    return Filter(
+        must=[
+            FieldCondition(
+                key=key,
+                match=MatchValue(value=value),
+            )
+            for key, value in filters.items()
+        ]
+    )
 
-    if details.get("summary"):
-        documents.append({
-            "field": "summary",
-            "text": details['summary'],
-        })
+def _ensure_jd_exists(request: Request, jd_id: str) -> None:
+    qdrant = request.app.state.qdrant_service
+
+    try:
+        points, _ = qdrant.client.scroll(
+            collection_name=qdrant.collection_name,
+            scroll_filter=_build_filter({
+                "type": "jd",
+                "jd_id": jd_id
+            }),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as e:
+        print("Check JD error:", repr(e))
+        raise HTTPException(status_code=503, detail='Không kiểm tra được JD.')
     
-    if details.get("skills"):
-        skill_text_parts = []
-
-        for group_name, skills in details['skills'].items():
-            skill_text_parts.append(f"{group_name}: {', '.join(skills)}")
-        
-        skill_text = "\n".join(skill_text_parts)
-
-        if skill_text.strip():
-            documents.append({
-                "field": "skills",
-                "text": skill_text,
-            })
-
-    for index, exp in enumerate(details.get("work_experience", [])):
-        text = "\n".join([
-            exp.get("title") or "",
-            exp.get("company") or "",
-            exp.get("date") or "",
-            "\n".join(exp.get("responsibilities", [])),
-        ]).strip()
-
-        if text:
-            documents.append({
-                "field": "work_experience",
-                "index": index,
-                "text": text,
-            })
-    
-    for index, project in enumerate(details.get("projects", [])):
-        text = "\n".join([
-            project.get("title") or "",
-            project.get("date") or "",
-            ", ".join(project.get("tools", [])),
-            "\n".join(project.get("descriptions", [])),
-        ]).strip()
-
-        if text:
-            documents.append({
-                "field": "projects",
-                "index": index,
-                "text": text,
-            })
-    
-    for index, edu in enumerate(details.get("education", [])):
-        text = "\n".join([
-            edu.get("school") or "",
-            edu.get("degree") or "",
-            edu.get("major") or "",
-            edu.get("date") or "",
-            "\n".join(edu.get("descriptions", []))
-        ]).strip()
-
-        if text:
-            documents.append({
-                "field": "education",
-                "index": index,
-                "text": text,
-            })
-    
-    return documents
+    if not points:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy JD id={jd_id}")
 
 @router.post("/upload")
-async def upload_cv(request: Request, file: UploadFile = File(...)):
+async def upload_cv(request: Request, file: UploadFile = File(...), jd_id: str | None = None):
+    if not jd_id:
+        raise HTTPException(status_code=400, detail="Thiếu jd_id khi upload CV.")
+    
+    _ensure_jd_exists(request, jd_id)
+
+    cv_id = str(uuid4())
     try:
         result = await process_cv_pdf(file)
 
@@ -86,8 +56,10 @@ async def upload_cv(request: Request, file: UploadFile = File(...)):
         if not texts:
             return {
                 "success": True,
-                "message": "Upload và xử lý CV thành công, nhưng không có nội dung đủ rõ để tạo embedding.",
+                "message": "Upload CV thành công, nhưng không có nội dung đủ rõ để tạo embedding.",
                 "data": {
+                    "jd_id": jd_id,
+                    "cv_id": cv_id,
                     "filename": result.filename,
                     "page_count": result.page_count,
                     "extraction_method": result.extraction_method,
@@ -98,7 +70,10 @@ async def upload_cv(request: Request, file: UploadFile = File(...)):
             }
 
         try:
-            vectors = request.app.state.embedding_service.embed_texts(texts)
+            dense_vectors = request.app.state.embedding_service.embed_texts(texts)
+
+            sparse_service = getattr(request.app.state, "sparse_embedding_service", None)
+            sparse_vectors = sparse_service.embed_texts(texts) if sparse_service else None
         except Exception as e:
             print("Embedding error:", repr(e))
             raise HTTPException(status_code=503, detail="Không tạo được embedding cho CV.")
@@ -106,6 +81,8 @@ async def upload_cv(request: Request, file: UploadFile = File(...)):
         payloads = [
             {
                 "type": "cv",
+                "jd_id": jd_id,
+                "cv_id": cv_id,
                 "filename": result.filename,
                 "page_count": result.page_count,
                 "extraction_method": result.extraction_method,
@@ -122,22 +99,26 @@ async def upload_cv(request: Request, file: UploadFile = File(...)):
 
         try:
             point_ids = request.app.state.qdrant_service.upsert(
-                vectors=vectors,
+                vectors=dense_vectors,
+                sparse_vectors=sparse_vectors,
                 payloads=payloads
             )
         except Exception as e:
             print("Qdrant error:", repr(e))
-            raise HTTPException(status_code=503, detail="Không lưu được embedding vào Qdrant.")
+            raise HTTPException(status_code=503, detail="Không lưu được CV vào Qdrant.")
 
         return {
             "success": True,
-            "message": "Upload và xử lý CV thành công.",
+            "message": "Upload CV thành công.",
             "data": {
+                "jd_id": jd_id,
+                "cv_id": cv_id,
                 "filename": result.filename,
                 "page_count": result.page_count,
                 "extraction_method": result.extraction_method,
                 "embedding_count": len(point_ids),
                 "point_ids": point_ids,
+                "has_sparse": sparse_vectors is not None,
                 "details": result.details,
             }
         }
