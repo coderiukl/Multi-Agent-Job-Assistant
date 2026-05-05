@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+transformers
+pydantic_settings
+python-multipart
+pytesseract
+PyMuPDF
+sentence_transformers
+qdrant-client
