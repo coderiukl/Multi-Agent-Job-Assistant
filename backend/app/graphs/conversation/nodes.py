@@ -1,10 +1,13 @@
 import logging
 from typing import Any
+import asyncio
 
 from app.core.exceptions import ResourceNotFoundException
 
 from app.graphs.conversation.state import ConversationState
 from app.graphs.conversation.routing import collect_missing_inputs
+from app.graphs.conversation.planning import plan_workflow
+from app.graphs.conversation.workflow import advance_workflow
 
 from app.repositories.cv import CVRepository
 
@@ -15,6 +18,7 @@ from app.schemas.job_matching import JobMatchingInput, JobMatchingResult, JobMat
 from app.schemas.cv_analysis import CVAnalysisInput, CVAnalysisResult, CVQualityLevel
 from app.schemas.career_advice import CareerAdviceInput, CareerAdviceResult
 from app.schemas.cover_letter import CoverLetterInput, CoverLetterResult
+from app.schemas.workflow import WorkflowStep, WorkflowJobMatch
 
 from app.services.conversation.intent_analyzer import ConversationIntentAnalyzer
 from app.services.job_search import HybridJobSearchService
@@ -41,6 +45,8 @@ CV_QUALITY_LABELS: dict[CVQualityLevel, str] = {
     CVQualityLevel.NEEDS_IMPROVEMENT: "cần cải thiện",
     CVQualityLevel.WEAK: "còn yếu",
 }
+
+WORKFLOW_MATCH_LIMIT = 5
 
 class ConversationNodes:
     def __init__(
@@ -266,47 +272,47 @@ class ConversationNodes:
         }
 
     async def execute_job_matching(self, state: ConversationState) -> dict[str, Any]:
-            cv_profile = state.get("cv_profile")
-            job_description = state.get("job_description")
-            missing_inputs: list[RequiredInput] = []
+        cv_profile = state.get("cv_profile")
+        job_description = state.get("job_description")
+        missing_inputs: list[RequiredInput] = []
 
-            if cv_profile is None:
-                missing_inputs.append(RequiredInput.CV)
+        if cv_profile is None:
+            missing_inputs.append(RequiredInput.CV)
 
-            if not job_description:
-                missing_inputs.append(RequiredInput.JOB_DESCRIPTION)
+        if not job_description:
+            missing_inputs.append(RequiredInput.JOB_DESCRIPTION)
 
-            if missing_inputs:
-                return {
-                    "route": ConversationRoute.CLARIFICATION,
-                    "status": ConversationStatus.NEEDS_CLARIFICATION,
-                    "missing_inputs": missing_inputs,
-                    "assistant_message": self._build_clarification_message(missing_inputs, generated_question=None),
-                }
-
-            matching_input = JobMatchingInput(cv_profile=cv_profile, job=JobMatchTarget(description=job_description))
-
-            result = await self._job_matching_service.match(matching_input)
-
-            assistant_message = self._build_job_matching_message(result)
-
-            logger.info(
-                "Conversation job matching completed",
-                extra={
-                    "cv_id": state.get("cv_id"),
-                    "job_id": result.job_id,
-                    "overall_score": result.overall_score,
-                    "recommendation": result.recommendation.value,
-                },
-            )
-
+        if missing_inputs:
             return {
-                "route": ConversationRoute.JOB_MATCHING,
-                "status": ConversationStatus.COMPLETED,
-                "missing_inputs": [],
-                "assistant_message": assistant_message,
-                "job_matching_result": result,
+                "route": ConversationRoute.CLARIFICATION,
+                "status": ConversationStatus.NEEDS_CLARIFICATION,
+                "missing_inputs": missing_inputs,
+                "assistant_message": self._build_clarification_message(missing_inputs, generated_question=None),
             }
+
+        matching_input = JobMatchingInput(cv_profile=cv_profile, job=JobMatchTarget(description=job_description))
+
+        result = await self._job_matching_service.match(matching_input)
+
+        assistant_message = self._build_job_matching_message(result)
+
+        logger.info(
+            "Conversation job matching completed",
+            extra={
+                "cv_id": state.get("cv_id"),
+                "job_id": result.job_id,
+                "overall_score": result.overall_score,
+                "recommendation": result.recommendation.value,
+            },
+        )
+
+        return {
+            "route": ConversationRoute.JOB_MATCHING,
+            "status": ConversationStatus.COMPLETED,
+            "missing_inputs": [],
+            "assistant_message": assistant_message,
+            "job_matching_result": result,
+        }
     
     async def respond_clarification(self, state: ConversationState) -> dict[str, Any]:
         intent = state['intent']
@@ -363,6 +369,213 @@ class ConversationNodes:
             ),
         }
 
+    async def create_workflow(self, state: ConversationState) -> dict[str, Any]:
+        workflow = plan_workflow(state)
+
+        logger.info(
+            "Conversation workflow planned",
+            extra={
+                "workflow_type": workflow.workflow_type.value,
+                "steps": [
+                    step.value
+                    for step in workflow.steps
+                ],
+                "current_step": (
+                    workflow.current_step.value
+                    if workflow.current_step
+                    else None
+                ),
+            },
+        )
+
+        return {"workflow": workflow}
+
+    async def execute_workflow_job_matching(self, state: ConversationState) -> dict[str, Any]:
+        workflow = state.get("workflow")
+        cv_profile = state.get("cv_profile")
+        search_result = state.get("job_search_result")
+
+        if workflow is None:
+            raise ValueError("Workflow plan is required for workflow job matching. ")
+
+        if cv_profile is None:
+            missing_inputs = [RequiredInput.CV]
+
+            return {
+                "route": ConversationRoute.CLARIFICATION,
+                "status": ConversationStatus.NEEDS_CLARIFICATION,
+                "missing_inputs": missing_inputs,
+                "assistant_message": self._build_clarification_message(
+                    missing_inputs=missing_inputs,
+                    generated_question=None,
+                ),
+            }
+
+        if search_result is None:
+            raise ValueError("Job search result is required before workflow matching.")
+
+        candidates = search_result.items[:WORKFLOW_MATCH_LIMIT]
+
+        if not candidates:
+            updated_workflow = workflow.model_copy(
+                update={"current_step": WorkflowStep.COMPLETED}
+            )
+
+            return {
+                "workflow": updated_workflow,
+                "workflow_job_matches": [],
+                "status": ConversationStatus.COMPLETED,
+                "assistant_message": (
+                    "Tôi chưa tìm thấy công việc phù hợp để "
+                    "thực hiện bước đánh giá CV."
+                ),
+            }
+
+        tasks = [self._match_workflow_job(cv_profile=cv_profile, job=hit.job) for hit in candidates]
+
+        matches = await asyncio.gather(*tasks)
+
+        ranked_matches = sorted(matches, key=lambda item: item.match.overall_score, reverse=True)
+
+        updated_workflow = advance_workflow(
+            workflow,
+            WorkflowStep.JOB_MATCHING,
+        )
+
+        logger.info(
+            "Workflow job matching completed",
+            extra={
+                "candidate_count": len(candidates),
+                "matched_count": len(ranked_matches),
+                "best_score": (
+                    ranked_matches[0].match.overall_score
+                    if ranked_matches
+                    else None
+                ),
+                "next_step": updated_workflow.current_step.value,
+            },
+        )
+
+        return {
+            "workflow_job_matches": ranked_matches,
+            "workflow": updated_workflow,
+        }
+
+    async def execute_workflow_job_search(self, state: ConversationState) -> dict[str, Any]:
+            workflow = state.get("workflow")
+    
+            if workflow is None:
+                raise ValueError("Workflow plan is required for workflow job search.")
+    
+            request = JobSearchRequest(
+                query=state['message'],
+                page=1,
+                page_size=10,
+            )
+    
+            search_context = build_job_search_context(state.get("cv_profile"))
+    
+            result = await self._job_search_service(request, context=search_context)
+    
+            updated_workflow = advance_workflow(workflow, WorkflowStep.JOB_SEARCH,)
+    
+            logger.info(
+                "Workflow job search completed",
+                extra={
+                    "query": request.query,
+                    "returned_items": len(result.items),
+                    "next_step": updated_workflow.current_step.value,
+                },
+            )
+    
+            return {
+                "job_search_resultl": result,
+                "workflow": updated_workflow,
+            }
+
+    async def execute_workflow_career_advice(self, state: ConversationState) -> dict[str, Any]:
+        workflow = state.get("workflow")
+
+        if workflow is None:
+            raise ValueError("Workflow plan is required for workflow career advice.")
+
+        advice_input = CareerAdviceInput(
+            user_request=state['message'],
+            cv_profile=state.get("cv_profile"),
+        )
+
+        result = await self._career_advice_service.advise(advice_input)
+
+        updated_workflow = advance_workflow(
+            workflow,
+            WorkflowStep.CAREER_ADVICE,
+        )
+
+        logger.info(
+            "Workflow career advice completed",
+            extra={
+                "is_personalized": result.is_personalized,
+                "recommended_role_count": len(
+                    result.recommended_roles
+                ),
+                "next_step": updated_workflow.current_step.value,
+            },
+        )
+
+        return {
+            "career_advice_result": result,
+            "workflow": updated_workflow,
+        }
+
+    async def build_workflow_response(self, state: ConversationState) -> dict[str, Any]:
+        matches = state.get("workflow_job_matches", [])
+        career_advice = state.get("career_advice_result")
+        search_result = state.get("job_search_result")
+
+        if matches:
+            lines = ["Tôi đã tìm và đánh giá các công việc phù hợp nhất với CV của bạn:"]
+
+            for index, item in enumerate(matches, start=1):
+                job = item.job
+                match = item.match
+
+                company = job.company or "Không rõ công ty"
+
+                lines.append(
+                    f"{index}. {job.title} - {company}: "
+                    f"{match.overall_score:.1f}/100"
+                )
+
+            if career_advice is None:
+                advice_message = self._build_career_advice_message(career_advice)
+
+                lines.extend(["", advice_message])
+
+            assistant_message = "\n".join(lines)
+
+        elif search_result is not None:
+            assistant_message = self._build_job_search_message(
+                search_result,
+                used_cv=state.get("cv_profile") is not None,
+            )
+
+        else:
+            assistant_message = "Workflow đã hoàn thành nhưng chưa có kết quả phù hợp."
+
+        logger.info(
+            "Workflow response built",
+            extra={
+                "matched_jobs": len(matches),
+                "has_career_advice": career_advice is not None,
+            },
+        )
+
+        return {
+            "status": ConversationStatus.COMPLETED,
+            "missing_inputs": [],
+            "assistant_message": assistant_message,
+        }
+   
     @staticmethod
     def _build_clarification_message(*, missing_inputs: list[RequiredInput], generated_question: str | None) -> str:
         missing_cv = RequiredInput.CV in missing_inputs
@@ -457,3 +670,13 @@ class ConversationNodes:
             f"mô tả công việc của bạn "
             f"({result.word_count} từ)."
         )
+
+    async def _match_workflow_job(self, *, cv_profile, job) -> WorkflowJobMatch:
+        matching_input = JobMatchingInput(
+            cv_profile=cv_profile,
+            job=JobMatchTarget.from_normalized_job(job),
+        )
+
+        result = await self._job_matching_service.match(matching_input)
+
+        return WorkflowJobMatch(job=job, match=result)

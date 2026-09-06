@@ -2,6 +2,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.schemas.job import NormalizedJob
+from app.schemas.job_matching import JobMatchingResult
+
 class WorkflowType(StrEnum):
     SINGLE_AGENT = "single_agent"
     JOB_DISCOVERY = "job_discovery"
@@ -16,6 +19,10 @@ class WorkflowStep(StrEnum):
     CAREER_ADVICE = "career_advice"
     COVER_LETTER = "cover_letter"
     COMPLETED = "completed"
+
+class WorkflowJobMatch(BaseModel):
+    job: NormalizedJob
+    match: JobMatchingResult
 
 class WorkflowPlan(BaseModel):
     workflow_type: WorkflowType = WorkflowType.SINGLE_AGENT

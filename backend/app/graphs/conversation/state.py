@@ -12,7 +12,7 @@ from app.schemas.career_advice import CareerAdviceResult
 from app.schemas.job_search import JobSearchResult
 from app.schemas.job_matching import JobMatchingResult
 from app.schemas.cover_letter import CoverLetterResult
-from app.schemas.workflow import WorkflowPlan
+from app.schemas.workflow import WorkflowPlan, WorkflowJobMatch
 
 class ConversationState(TypedDict, total=False):
     # Dữ liệu từ request
@@ -41,6 +41,7 @@ class ConversationState(TypedDict, total=False):
     career_advice_result: CareerAdviceResult | None
     job_search_result: JobSearchResult | None
     job_matching_result: JobMatchingResult | None
+    workflow_job_matches: list[WorkflowJobMatch]
     cover_letter_result: CoverLetterResult | None
 
     # Nội dung trả về người dùng
