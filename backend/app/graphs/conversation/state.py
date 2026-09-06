@@ -12,6 +12,7 @@ from app.schemas.career_advice import CareerAdviceResult
 from app.schemas.job_search import JobSearchResult
 from app.schemas.job_matching import JobMatchingResult
 from app.schemas.cover_letter import CoverLetterResult
+from app.schemas.workflow import WorkflowPlan
 
 class ConversationState(TypedDict, total=False):
     # Dữ liệu từ request
@@ -26,6 +27,9 @@ class ConversationState(TypedDict, total=False):
 
     # Kết quả Intent Analysis
     intent: IntentAnalysisResult
+
+    # Workflow
+    workflow: WorkflowPlan | None
 
     # Kết quả điều phối
     route: ConversationRoute
