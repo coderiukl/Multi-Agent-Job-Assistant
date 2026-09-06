@@ -17,6 +17,10 @@ INTENT_TO_STATE: dict[ConversationIntent, ConversationRoute] = {
     ConversationIntent.CLARIFICATION: ConversationRoute.CLARIFICATION,
 }
 
+class IntentGateRoute(StrEnum):
+    CLARIFICATION = "clarification"
+    PLAN_WORKFLOW = "plan_workflow"
+
 class WorkflowRoute(StrEnum):
     SINGLE_AGENT = "single_agent"
     JOB_SEARCH = "job_search"
@@ -36,13 +40,18 @@ def collect_missing_inputs(state: ConversationState) -> list[RequiredInput]:
 
     return missing_inputs
 
-def route_after_intent(state: ConversationState) -> ConversationRoute:
+def route_after_analysis(state: ConversationState) -> IntentGateRoute:
     intent = state["intent"]
     missing_inputs = collect_missing_inputs(state)
 
     if intent.needs_clarification or missing_inputs:
-        return ConversationRoute.CLARIFICATION
+        return IntentGateRoute.CLARIFICATION
 
+    return IntentGateRoute.PLAN_WORKFLOW
+
+def route_after_intent(state: ConversationState) -> ConversationRoute:
+    intent = state["intent"]
+    
     return INTENT_TO_STATE[intent.primary_intent]
 
 def route_workflow_start(state: ConversationState) -> WorkflowRoute:

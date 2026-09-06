@@ -5,7 +5,7 @@ import asyncio
 from app.core.exceptions import ResourceNotFoundException
 
 from app.graphs.conversation.state import ConversationState
-from app.graphs.conversation.routing import collect_missing_inputs
+from app.graphs.conversation.routing import collect_missing_inputs, route_after_intent
 from app.graphs.conversation.planning import plan_workflow
 from app.graphs.conversation.workflow import advance_workflow
 
@@ -287,7 +287,7 @@ class ConversationNodes:
                 "route": ConversationRoute.CLARIFICATION,
                 "status": ConversationStatus.NEEDS_CLARIFICATION,
                 "missing_inputs": missing_inputs,
-                "assistant_message": self._build_clarification_message(missing_inputs, generated_question=None),
+                "assistant_message": self._build_clarification_message(missing_inputs=missing_inputs, generated_question=None),
             }
 
         matching_input = JobMatchingInput(cv_profile=cv_profile, job=JobMatchTarget(description=job_description))
@@ -475,7 +475,7 @@ class ConversationNodes:
     
             search_context = build_job_search_context(state.get("cv_profile"))
     
-            result = await self._job_search_service(request, context=search_context)
+            result = await self._job_search_service.search(request, context=search_context)
     
             updated_workflow = advance_workflow(workflow, WorkflowStep.JOB_SEARCH,)
     
@@ -489,7 +489,7 @@ class ConversationNodes:
             )
     
             return {
-                "job_search_resultl": result,
+                "job_search_result": result,
                 "workflow": updated_workflow,
             }
 
@@ -546,7 +546,7 @@ class ConversationNodes:
                     f"{match.overall_score:.1f}/100"
                 )
 
-            if career_advice is None:
+            if career_advice is not None:
                 advice_message = self._build_career_advice_message(career_advice)
 
                 lines.extend(["", advice_message])
@@ -571,10 +571,21 @@ class ConversationNodes:
         )
 
         return {
+            "route": route_after_intent(state),
             "status": ConversationStatus.COMPLETED,
             "missing_inputs": [],
             "assistant_message": assistant_message,
         }
+
+    async def dispatch_single_agent(self, state: ConversationState) -> dict[str, Any]:
+        logger.info(
+            "Dispatching single-agent workflow",
+            extra={
+                "primary_intent": state["intent"].primary_intent.value,
+            },
+        )
+
+        return {}
    
     @staticmethod
     def _build_clarification_message(*, missing_inputs: list[RequiredInput], generated_question: str | None) -> str:
