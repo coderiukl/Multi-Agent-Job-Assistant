@@ -1,4 +1,5 @@
-from langgraph.graph import START, END, StateGraph
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.graphs.conversation.nodes import ConversationNodes
@@ -13,10 +14,18 @@ from app.graphs.conversation.routing import (
 from app.graphs.conversation.state import ConversationState
 from app.schemas.conversation import ConversationRoute
 
-def build_conversation_graph(nodes: ConversationNodes) -> CompiledStateGraph:
+
+def build_conversation_graph(
+    nodes: ConversationNodes,
+    *,
+    checkpointer: BaseCheckpointSaver | None = None,
+) -> CompiledStateGraph:
+
     graph = StateGraph(ConversationState)
 
     # Core conversations nodes
+    graph.add_node("prepare_turn", nodes.prepare_turn)
+    graph.add_node("record_assistant_message", nodes.record_assistant_message)
     graph.add_node("resolve_context", nodes.resolve_context)
     graph.add_node("analyze_intent", nodes.analyze_intent)
 
@@ -39,12 +48,13 @@ def build_conversation_graph(nodes: ConversationNodes) -> CompiledStateGraph:
     graph.add_node("job_search", nodes.execute_job_search)
     graph.add_node("job_matching", nodes.execute_job_matching)
 
-    graph.add_edge(START, "resolve_context")
+    graph.add_edge(START, "prepare_turn")
+    graph.add_edge("prepare_turn", "resolve_context")
     graph.add_edge("resolve_context", "analyze_intent")
 
     graph.add_conditional_edges(
-        "analyze_intent", 
-        route_after_analysis, 
+        "analyze_intent",
+        route_after_analysis,
         {
             IntentGateRoute.CLARIFICATION: "clarification",
             IntentGateRoute.PLAN_WORKFLOW: "plan_workflow",
@@ -112,15 +122,22 @@ def build_conversation_graph(nodes: ConversationNodes) -> CompiledStateGraph:
         },
     )
     # Terminal nodes
-    graph.add_edge("workflow_response", END)
-    graph.add_edge("clarification", END)
-    graph.add_edge("small_talk", END)
-    graph.add_edge("out_of_scope", END)
-    graph.add_edge("general_question", END)
-    graph.add_edge("cv_analysis", END)
-    graph.add_edge("career_advice", END)
-    graph.add_edge("cover_letter", END)
-    graph.add_edge("job_search", END)
-    graph.add_edge("job_matching", END)
+    terminal_nodes = [
+        "workflow_response",
+        "clarification",
+        "small_talk",
+        "out_of_scope",
+        "general_question",
+        "cv_analysis",
+        "career_advice",
+        "cover_letter",
+        "job_search",
+        "job_matching",
+    ]
 
-    return graph.compile()
+    for node_name in terminal_nodes:
+        graph.add_edge(node_name, "record_assistant_message")
+
+    graph.add_edge("record_assistant_message", END)
+
+    return graph.compile(checkpointer=checkpointer)

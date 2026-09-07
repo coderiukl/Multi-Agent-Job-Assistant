@@ -1,4 +1,5 @@
 import {
+  getConversationHistory,
   searchJobs,
   sendConversationMessage,
   uploadCv,
@@ -8,8 +9,16 @@ import "./styles.css";
 
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const CONVERSATION_THREAD_KEY = "multi-agent-job-assistant-thread-id";
+const CONVERSATION_THREADS_KEY =
+  "multi-agent-job-assistant-conversation-threads";
+
+const MAX_SAVED_CONVERSATIONS = 30;
+const MAX_CONVERSATION_TITLE_LENGTH = 55;
 
 const state = {
+  threadId: getOrCreateThreadId(),
+  conversationThreads: loadConversationThreads(),
   messages: [],
 
   selectedCvFile: null,
@@ -35,14 +44,24 @@ const state = {
 
   selectedJob: null,
   activeWorkspacePanel: "chat",
+  historyOpen: true,
+  resultsOpen: false,
+  resultsAvailable: false,
   lastFocusedBeforeDrawer: null,
 };
 
 const elements = {
+  sidebarNewChatButton: document.querySelector("#sidebar-new-chat-button"),
+  toggleHistoryButton: document.querySelector("#toggle-history-button"),
+  conversationHistoryList: document.querySelector("#conversation-history-list"),
+  conversationHistoryEmpty: document.querySelector("#conversation-history-empty"),
+
   newChatButton: document.querySelector("#new-chat-button"),
+  toggleResultsButton: document.querySelector("#toggle-results-button"),
   workspace: document.querySelector(".workspace"),
   mobileTabs: document.querySelector(".mobile-workspace-tabs"),
   mobileTabButtons: document.querySelectorAll(".mobile-tab"),
+  mobileResultsTab: document.querySelector("#mobile-results-tab"),
   mobileResultsBadge: document.querySelector("#mobile-results-badge"),
 
   messageList: document.querySelector("#message-list"),
@@ -69,6 +88,7 @@ const elements = {
 
   globalError: document.querySelector("#global-error"),
 
+  resultsPanel: document.querySelector("#results-panel"),
   jobResults: document.querySelector("#job-results"),
   resultsSummary: document.querySelector("#results-summary"),
   resultCount: document.querySelector("#result-count"),
@@ -78,6 +98,7 @@ const elements = {
   resultsEyebrow: document.querySelector("#results-eyebrow"),
   resultsTitle: document.querySelector("#results-title"),
   backToJobsButton: document.querySelector("#back-to-jobs-button"),
+  closeResultsButton: document.querySelector("#close-results-button"),
 
   jobDetailOverlay: document.querySelector("#job-detail-overlay"),
   jobDetailDrawer: document.querySelector("#job-detail-drawer"),
@@ -85,26 +106,298 @@ const elements = {
   closeJobDetailButton: document.querySelector("#close-job-detail"),
 };
 
+function createThreadId() {
+  return crypto.randomUUID();
+}
 
-initializeApplication();
+function getOrCreateThreadId() {
+  try {
+    const storedThreadId = localStorage.getItem(
+      CONVERSATION_THREAD_KEY,
+    );
+
+    if (storedThreadId) {
+      return storedThreadId;
+    }
+
+    const threadId = createThreadId();
+
+    localStorage.setItem(
+      CONVERSATION_THREAD_KEY,
+      threadId,
+    );
+
+    return threadId;
+  } catch {
+    return createThreadId();
+  }
+}
 
 
-function initializeApplication() {
+function saveThreadId(threadId) {
+  state.threadId = threadId;
+
+  try {
+    localStorage.setItem(
+      CONVERSATION_THREAD_KEY,
+      threadId,
+    );
+  } catch {
+    // The current tab can still use the generated thread ID.
+  }
+}
+
+function loadConversationThreads() {
+  try {
+    const storedValue = localStorage.getItem(
+      CONVERSATION_THREADS_KEY,
+    );
+
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    return parsedValue
+      .filter(
+        (item) =>
+          typeof item?.threadId === "string" &&
+          typeof item?.title === "string" &&
+          typeof item?.updatedAt === "string",
+      )
+      .slice(0, MAX_SAVED_CONVERSATIONS);
+  } catch {
+    return [];
+  }
+}
+
+
+function saveConversationThreads() {
+  try {
+    localStorage.setItem(
+      CONVERSATION_THREADS_KEY,
+      JSON.stringify(state.conversationThreads),
+    );
+  } catch {
+    // The conversation itself can still work without the sidebar index.
+  }
+}
+
+
+function rememberConversationThread({
+  threadId,
+  firstMessage,
+}) {
+  const existingThread = state.conversationThreads.find(
+    (thread) => thread.threadId === threadId,
+  );
+
+  const nextThread = {
+    threadId,
+    title:
+      existingThread?.title ??
+      createConversationTitle(firstMessage),
+    updatedAt: new Date().toISOString(),
+  };
+
+  state.conversationThreads = [
+    nextThread,
+    ...state.conversationThreads.filter(
+      (thread) => thread.threadId !== threadId,
+    ),
+  ].slice(0, MAX_SAVED_CONVERSATIONS);
+
+  saveConversationThreads();
+  renderConversationHistory();
+}
+
+function createConversationTitle(message) {
+  const normalizedMessage = String(message ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalizedMessage) {
+    return "Cuộc trò chuyện mới";
+  }
+
+  if (
+    normalizedMessage.length <=
+    MAX_CONVERSATION_TITLE_LENGTH
+  ) {
+    return normalizedMessage;
+  }
+
+  return (
+    normalizedMessage.slice(
+      0,
+      MAX_CONVERSATION_TITLE_LENGTH - 1,
+    ).trimEnd() + "…"
+  );
+}
+
+function renderConversationHistory() {
+  const list = elements.conversationHistoryList;
+  const emptyState = elements.conversationHistoryEmpty;
+
+  if (!list || !emptyState) {
+    return;
+  }
+
+  list.innerHTML = "";
+
+  emptyState.hidden =
+    state.conversationThreads.length > 0;
+
+  for (const thread of state.conversationThreads) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className = "conversation-history-item";
+    button.dataset.threadId = thread.threadId;
+
+    const isActive = thread.threadId === state.threadId;
+
+    button.classList.toggle("is-active", isActive);
+
+    if (isActive) {
+      button.setAttribute("aria-current", "true");
+    }
+
+    const title = document.createElement("span");
+
+    title.className = "conversation-history-title";
+    title.textContent = thread.title;
+
+    const time = document.createElement("span");
+
+    time.className = "conversation-history-time";
+    time.textContent = formatConversationTime(
+      thread.updatedAt,
+    );
+
+    button.append(title, time);
+    list.append(button);
+  }
+}
+
+
+function formatConversationTime(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const today = new Date();
+  const isToday =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+
+  if (isToday) {
+    return new Intl.DateTimeFormat("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function handleConversationHistoryClick(event) {
+  const button = event.target.closest(
+    "[data-thread-id]",
+  );
+
+  if (!button) {
+    return;
+  }
+
+  const threadId = button.dataset.threadId;
+
+  if (!threadId || threadId === state.threadId) {
+    return;
+  }
+
+  saveThreadId(threadId);
+
+  // Reload để reset toàn bộ workspace và gọi API restore history.
+  window.location.reload();
+}
+
+initializeApplication().catch((error) => {
+  console.error(
+    "Application initialization failed:",
+    error,
+  );
+});
+
+
+async function initializeApplication() {
   bindEvents();
   resizeMessageInput();
   setActiveWorkspacePanel("chat");
   updateComposerContext();
+  showInitialJobState();
+  renderConversationHistory();
 
+  const restored = await restoreConversationHistory();
+
+  if (!restored) {
+    addWelcomeMessage();
+  }
+}
+
+async function restoreConversationHistory() {
+  try {
+    const history = await getConversationHistory(
+      state.threadId,
+    );
+
+    if (!history.messages.length) {
+      return false;
+    }
+
+    saveThreadId(history.threadId);
+
+    for (const message of history.messages) {
+      addMessage({
+        role: message.role,
+        text: message.text,
+      });
+    }
+
+    elements.suggestionList.hidden = true;
+
+    return true;
+  } catch (error) {
+    console.warn(
+      "Conversation history could not be restored:",
+      error,
+    );
+
+    return false;
+  }
+}
+
+
+function addWelcomeMessage() {
   addMessage({
     role: "assistant",
     text:
       "Xin chào! Mình là Job Search AI. Mình có thể giúp bạn " +
       "tìm việc, phân tích CV và tư vấn định hướng nghề nghiệp.",
   });
-
-  showInitialJobState();
 }
-
 
 function bindEvents() {
   elements.messageInput.addEventListener(
@@ -180,6 +473,26 @@ function bindEvents() {
     resetConversation,
   );
 
+  elements.toggleResultsButton?.addEventListener(
+    "click",
+    toggleResultsPanel,
+  );
+  
+  elements.sidebarNewChatButton?.addEventListener(
+    "click",
+    resetConversation,
+  );
+
+  elements.toggleHistoryButton?.addEventListener(
+    "click",
+    toggleConversationHistory,
+  );
+
+  elements.conversationHistoryList?.addEventListener(
+    "click",
+    handleConversationHistoryClick,
+  );
+
   elements.suggestionList.addEventListener(
     "click",
     handleSuggestionClick,
@@ -203,6 +516,11 @@ function bindEvents() {
   elements.backToJobsButton?.addEventListener(
     "click",
     showJobSearchResultsFromState,
+  );
+
+  elements.closeResultsButton?.addEventListener(
+    "click",
+    closeResultsPanel,
   );
 
   elements.closeJobDetailButton.addEventListener(
@@ -238,7 +556,39 @@ function handleMobileTabClick(event) {
     return;
   }
 
-  setActiveWorkspacePanel(button.dataset.panel);
+  if (button.dataset.panel === "results") {
+    openResultsPanel();
+    return;
+  }
+
+  setActiveWorkspacePanel("chat");
+}
+
+
+function toggleConversationHistory() {
+  state.historyOpen = !state.historyOpen;
+
+  elements.workspace?.setAttribute(
+    "data-history-open",
+    String(state.historyOpen),
+  );
+
+  if (!elements.toggleHistoryButton) {
+    return;
+  }
+
+  const label = state.historyOpen
+    ? "Thu gọn lịch sử"
+    : "Mở lịch sử";
+
+  elements.toggleHistoryButton.setAttribute(
+    "aria-expanded",
+    String(state.historyOpen),
+  );
+  elements.toggleHistoryButton.setAttribute("aria-label", label);
+  elements.toggleHistoryButton.title = label;
+  elements.toggleHistoryButton.querySelector("span").textContent =
+    state.historyOpen ? "‹" : "☰";
 }
 
 
@@ -263,8 +613,78 @@ function setActiveWorkspacePanel(panel) {
 
 
 function showResultsPanelOnMobile() {
+  openResultsPanel();
+}
+
+
+function openResultsPanel() {
+  setResultsAvailability(true);
+  state.resultsOpen = true;
+  elements.workspace?.setAttribute("data-results-open", "true");
+  elements.resultsPanel?.setAttribute("aria-hidden", "false");
+  updateResultsToggleButton();
+
   if (window.matchMedia("(max-width: 640px)").matches) {
     setActiveWorkspacePanel("results");
+  }
+}
+
+
+function closeResultsPanel() {
+  state.resultsOpen = false;
+  elements.workspace?.setAttribute("data-results-open", "false");
+  elements.resultsPanel?.setAttribute("aria-hidden", "true");
+  updateResultsToggleButton();
+
+  setActiveWorkspacePanel("chat");
+}
+
+
+function toggleResultsPanel() {
+  if (state.resultsOpen) {
+    closeResultsPanel();
+    return;
+  }
+
+  openResultsPanel();
+}
+
+
+function setResultsAvailability(isAvailable) {
+  state.resultsAvailable = isAvailable;
+
+  if (elements.toggleResultsButton) {
+    elements.toggleResultsButton.hidden = !isAvailable;
+  }
+
+  if (elements.mobileResultsTab) {
+    elements.mobileResultsTab.hidden = !isAvailable;
+  }
+}
+
+
+function updateResultsToggleButton() {
+  if (!elements.toggleResultsButton) {
+    return;
+  }
+
+  elements.toggleResultsButton.setAttribute(
+    "aria-expanded",
+    String(state.resultsOpen),
+  );
+  elements.toggleResultsButton.classList.toggle(
+    "is-active",
+    state.resultsOpen,
+  );
+
+  const label = elements.toggleResultsButton.querySelector(
+    ".results-toggle-label",
+  );
+
+  if (label) {
+    label.textContent = state.resultsOpen
+      ? "Ẩn kết quả"
+      : "Xem kết quả";
   }
 }
 
@@ -340,9 +760,19 @@ async function handleSubmit(event) {
 
   try {
     const conversation = await sendConversationMessage({
+      threadId: state.threadId,
       message,
       cvId: state.uploadedCvId,
       jobDescription,
+    });
+
+    if (conversation.threadId) {
+      saveThreadId(conversation.threadId);
+    }
+
+    rememberConversationThread({
+      threadId: state.threadId,
+      firstMessage: message,
     });
 
     removeTypingIndicator();
@@ -3002,6 +3432,7 @@ function trapJobDetailFocus(event) {
 
 
 function showJobLoading() {
+  openResultsPanel();
   elements.resultsSummary.hidden = true;
   elements.jobSort.disabled = true;
 
@@ -3107,6 +3538,8 @@ function showJobErrorState() {
 
 
 function resetConversation() {
+  saveThreadId(createThreadId());
+  renderConversationHistory();
   state.messages = [];
   state.jobs = [];
   state.currentSearchResult = null;
@@ -3135,7 +3568,8 @@ function resetConversation() {
   clearError();
   closeJobDetail();
   showInitialJobState();
-  setActiveWorkspacePanel("chat");
+  closeResultsPanel();
+  setResultsAvailability(false);
   updateSendButton();
 
   addMessage({

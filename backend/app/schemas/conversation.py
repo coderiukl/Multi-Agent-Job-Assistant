@@ -1,14 +1,17 @@
 from enum import StrEnum
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.conversations_intent import IntentAnalysisResult
-from app.schemas.job_search import JobSearchResult
-from app.schemas.job_matching import JobMatchingResult
-from app.schemas.cv_analysis import CVAnalysisResult
 from app.schemas.career_advice import CareerAdviceResult
+from app.schemas.conversations_intent import IntentAnalysisResult
 from app.schemas.cover_letter import CoverLetterResult
-from app.schemas.workflow import WorkflowPlan, WorkflowJobMatch
+from app.schemas.cv_analysis import CVAnalysisResult
+from app.schemas.job_matching import JobMatchingResult
+from app.schemas.job_search import JobSearchResult
+from app.schemas.workflow import WorkflowJobMatch, WorkflowPlan
+
 
 class ConversationRoute(StrEnum):
     CLARIFICATION = "clarification"
@@ -22,16 +25,31 @@ class ConversationRoute(StrEnum):
     CAREER_ADVICE = "career_advice"
     COVER_LETTER = "cover_letter"
 
+
 class ConversationStatus(StrEnum):
     COMPLETED = "completed"
     NEEDS_CLARIFICATION = "needs_clarification"
     ROUTED = "routed"
 
+
 class RequiredInput(StrEnum):
     CV = "cv"
     JOB_DESCRIPTION = "job_description"
 
+
+class ConversationMessageData(BaseModel):
+    message_id: str | None = None
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ConversationHistoryData(BaseModel):
+    thread_id: UUID
+    messages: list[ConversationMessageData] = Field(default_factory=list)
+
+
 class ConversationResponseData(BaseModel):
+    thread_id: UUID
     assistant_message: str = Field(min_length=1)
     status: ConversationStatus
     route: ConversationRoute

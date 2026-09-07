@@ -1,22 +1,31 @@
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
+
+from app.schemas.career_advice import CareerAdviceResult
 from app.schemas.conversation import (
     ConversationRoute,
     ConversationStatus,
     RequiredInput,
 )
 from app.schemas.conversations_intent import IntentAnalysisResult
-from app.schemas.cv_profile import CVProfile
-from app.schemas.cv_analysis import CVAnalysisResult
-from app.schemas.career_advice import CareerAdviceResult
-from app.schemas.job_search import JobSearchResult
-from app.schemas.job_matching import JobMatchingResult
 from app.schemas.cover_letter import CoverLetterResult
-from app.schemas.workflow import WorkflowPlan, WorkflowJobMatch
+from app.schemas.cv_analysis import CVAnalysisResult
+from app.schemas.cv_profile import CVProfile
+from app.schemas.job_matching import JobMatchingResult
+from app.schemas.job_search import JobSearchResult
+from app.schemas.workflow import WorkflowJobMatch, WorkflowPlan
+
 
 class ConversationState(TypedDict, total=False):
+    messages: Annotated[list[AnyMessage], add_messages]
+
     # Dữ liệu từ request
     message: str
+    contextual_message: str
+    conversation_history: str
+
     cv_id: str | None
     job_description: str | None
 

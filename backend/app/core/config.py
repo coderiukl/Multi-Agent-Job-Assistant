@@ -6,7 +6,6 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # CORS origins
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
@@ -87,7 +86,7 @@ class Settings(BaseSettings):
     # OCR
     ocr_dpi: int = Field(default=250, ge=150, le=400)
     ocr_min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    
+
     # Pydantic settings
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -96,7 +95,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Job embeddings 
+    # Job embeddings
     embedding_model: str = "BAAI/bge-m3"
     embedding_dimensions: int = Field(default=1024, ge=1024, le=1024)
     embedding_device: Literal["cpu", "cuda"] = "cpu"
@@ -110,6 +109,17 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = Field(default=None, repr=False)
     qdrant_collection_name: str = "jobs_bge_m3_v1"
     qdrant_timeout_seconds: float = Field(default=30.0, gt=0)
+
+    # Conversation Memory
+    conversation_memory_backend: Literal[
+        "memory",
+        "postgres",
+    ] = "memory"
+    conversation_memory_pool_size: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
 
     # Upload size conversion
     @property

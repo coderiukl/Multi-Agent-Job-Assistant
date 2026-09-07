@@ -1,6 +1,8 @@
 from enum import StrEnum
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
 
 class ConversationIntent(StrEnum):
     CV_ANALYSIS = "cv_analysis"
@@ -13,7 +15,9 @@ class ConversationIntent(StrEnum):
     OUT_OF_SCOPE = "out_of_scope"
     CLARIFICATION = "clarification"
 
+
 class ConversationRequest(BaseModel):
+    thread_id: UUID = Field(default_factory=uuid4)
     message: str = Field(min_length=1, max_length=2000)
     cv_id: str | None = Field(default=None, max_length=100)
     job_description: str | None = Field(default=None, max_length=20_000)
@@ -37,10 +41,21 @@ class ConversationRequest(BaseModel):
         normalized = value.strip()
         return normalized or None
 
+
 class IntentAnalysisInput(BaseModel):
-    message: str = Field(min_length=1, max_length=2000, description="Message sent by the user.")
-    has_cv: bool = Field(default=False, description="Whether the request contains a CV.")
-    has_jd: bool = Field(default=False, description="Whether the request contains a job description.")
+    message: str = Field(
+        min_length=1, max_length=2000, description="Message sent by the user."
+    )
+    conversation_history: str = Field(
+        default="No previous conversation.", max_length=6_000
+    )
+    has_cv: bool = Field(
+        default=False, description="Whether the request contains a CV."
+    )
+    has_jd: bool = Field(
+        default=False, description="Whether the request contains a job description."
+    )
+
 
 class IntentAnalysisResult(BaseModel):
     primary_intent: ConversationIntent
@@ -56,15 +71,12 @@ class IntentAnalysisResult(BaseModel):
     def validate_clarification(self) -> "IntentAnalysisResult":
         if self.needs_clarification and not self.clarification_question:
             raise ValueError(
-                "clarification_question is required when "
-                "needs_clarification is true."
+                "clarification_question is required when needs_clarification is true."
             )
 
         if not self.needs_clarification and self.clarification_question is not None:
             raise ValueError(
-                "clarification_question must be null when "
-                "needs_clarification is false."
+                "clarification_question must be null when needs_clarification is false."
             )
 
         return self
-

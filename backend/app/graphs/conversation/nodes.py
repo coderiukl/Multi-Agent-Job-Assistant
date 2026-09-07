@@ -1,33 +1,43 @@
+import asyncio
 import logging
 from typing import Any
-import asyncio
+
+from langchain_core.messages import AIMessage
 
 from app.core.exceptions import ResourceNotFoundException
-
-from app.graphs.conversation.state import ConversationState
-from app.graphs.conversation.routing import collect_missing_inputs, route_after_intent
 from app.graphs.conversation.planning import plan_workflow
+from app.graphs.conversation.routing import collect_missing_inputs, route_after_intent
+from app.graphs.conversation.state import ConversationState
 from app.graphs.conversation.workflow import advance_workflow
-
+from app.memory.history import (
+    build_contextual_user_message,
+    format_conversation_history,
+)
 from app.repositories.cv import CVRepository
-
-from app.schemas.conversations_intent import IntentAnalysisInput
-from app.schemas.conversation import ConversationRoute, ConversationStatus, RequiredInput
-from app.schemas.job_search import JobSearchResult, JobSearchRequest
-from app.schemas.job_matching import JobMatchingInput, JobMatchingResult, JobMatchTarget, MatchRecommendation
-from app.schemas.cv_analysis import CVAnalysisInput, CVAnalysisResult, CVQualityLevel
 from app.schemas.career_advice import CareerAdviceInput, CareerAdviceResult
+from app.schemas.conversation import (
+    ConversationRoute,
+    ConversationStatus,
+    RequiredInput,
+)
+from app.schemas.conversations_intent import IntentAnalysisInput
 from app.schemas.cover_letter import CoverLetterInput, CoverLetterResult
-from app.schemas.workflow import WorkflowStep, WorkflowJobMatch
-
+from app.schemas.cv_analysis import CVAnalysisInput, CVAnalysisResult, CVQualityLevel
+from app.schemas.job_matching import (
+    JobMatchingInput,
+    JobMatchingResult,
+    JobMatchTarget,
+    MatchRecommendation,
+)
+from app.schemas.job_search import JobSearchRequest, JobSearchResult
+from app.schemas.workflow import WorkflowJobMatch, WorkflowStep
+from app.services.career_advice import CareerAdviceService
 from app.services.conversation.intent_analyzer import ConversationIntentAnalyzer
+from app.services.cover_letter import CoverLetterService
+from app.services.cv_analysis import CVAnalysisService
+from app.services.job_matching import JobMatchingService
 from app.services.job_search import HybridJobSearchService
 from app.services.job_search_context import build_job_search_context
-from app.services.job_matching import JobMatchingService
-from app.services.cv_analysis import CVAnalysisService
-from app.services.career_advice import CareerAdviceService
-from app.services.cover_letter import CoverLetterService
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +57,7 @@ CV_QUALITY_LABELS: dict[CVQualityLevel, str] = {
 }
 
 WORKFLOW_MATCH_LIMIT = 5
+
 
 class ConversationNodes:
     def __init__(
@@ -88,11 +99,11 @@ class ConversationNodes:
 
         logger.info(
             "Conversation context resolved",
-            extra = {
+            extra={
                 "cv_id": cv_id,
                 "has_cv": has_cv,
                 "has_jd": has_jd,
-            }
+            },
         )
 
         return {
@@ -104,8 +115,11 @@ class ConversationNodes:
     async def analyze_intent(self, state: ConversationState) -> dict[str, Any]:
         analyzer_input = IntentAnalysisInput(
             message=state["message"],
+            conversation_history=state.get(
+                "conversation_history", "No previous conversation."
+            ),
             has_cv=state.get("has_cv", False),
-            has_jd=state.get("has_jd", False)
+            has_jd=state.get("has_jd", False),
         )
 
         intent = await self._analyzer.analyze(analyzer_input)
@@ -132,14 +146,13 @@ class ConversationNodes:
                 "status": ConversationStatus.NEEDS_CLARIFICATION,
                 "missing_inputs": missing_inputs,
                 "assistant_message": self._build_clarification_message(
-                    missing_inputs=missing_inputs,
-                    generated_question=None
+                    missing_inputs=missing_inputs, generated_question=None
                 ),
             }
 
         analysis_input = CVAnalysisInput(
             cv_profile=cv_profile,
-            user_request=state["message"],
+            user_request=self._get_contextual_message(state),
         )
 
         result = await self._cv_analysis_service.analyze(analysis_input)
@@ -166,7 +179,7 @@ class ConversationNodes:
 
     async def execute_career_advice(self, state: ConversationState) -> dict[str, Any]:
         advice_input = CareerAdviceInput(
-            user_request=state["message"],
+            user_request=self._get_contextual_message(state),
             cv_profile=state.get("cv_profile"),
         )
 
@@ -193,15 +206,15 @@ class ConversationNodes:
 
     async def execute_job_search(self, state: ConversationState) -> dict[str, Any]:
         request = JobSearchRequest(
-            query=state["message"],
-            page=1,
-            page_size=10
+            query=self._get_contextual_message(state), page=1, page_size=10
         )
         search_context = build_job_search_context(state.get("cv_profile"))
 
         result = await self._job_search_service.search(request, context=search_context)
 
-        assistant_message = self._build_job_search_message(result, used_cv=search_context is not None)
+        assistant_message = self._build_job_search_message(
+            result, used_cv=search_context is not None
+        )
 
         logger.info(
             "Conversation job search completed",
@@ -246,7 +259,7 @@ class ConversationNodes:
             }
 
         letter_input = CoverLetterInput(
-            user_request=state["message"],
+            user_request=self._get_contextual_message(state),
             cv_profile=cv_profile,
             job=JobMatchTarget(description=job_description),
         )
@@ -287,10 +300,14 @@ class ConversationNodes:
                 "route": ConversationRoute.CLARIFICATION,
                 "status": ConversationStatus.NEEDS_CLARIFICATION,
                 "missing_inputs": missing_inputs,
-                "assistant_message": self._build_clarification_message(missing_inputs=missing_inputs, generated_question=None),
+                "assistant_message": self._build_clarification_message(
+                    missing_inputs=missing_inputs, generated_question=None
+                ),
             }
 
-        matching_input = JobMatchingInput(cv_profile=cv_profile, job=JobMatchTarget(description=job_description))
+        matching_input = JobMatchingInput(
+            cv_profile=cv_profile, job=JobMatchTarget(description=job_description)
+        )
 
         result = await self._job_matching_service.match(matching_input)
 
@@ -313,9 +330,9 @@ class ConversationNodes:
             "assistant_message": assistant_message,
             "job_matching_result": result,
         }
-    
+
     async def respond_clarification(self, state: ConversationState) -> dict[str, Any]:
-        intent = state['intent']
+        intent = state["intent"]
         missing_inputs = collect_missing_inputs(state)
 
         assistant_message = self._build_clarification_message(
@@ -327,7 +344,7 @@ class ConversationNodes:
             "route": ConversationRoute.CLARIFICATION,
             "status": ConversationStatus.NEEDS_CLARIFICATION,
             "missing_inputs": missing_inputs,
-            "assistant_message": assistant_message
+            "assistant_message": assistant_message,
         }
 
     async def respond_small_talk(
@@ -357,7 +374,9 @@ class ConversationNodes:
             ),
         }
 
-    async def respond_general_question(self, state: ConversationState) -> dict[str, Any] :
+    async def respond_general_question(
+        self, state: ConversationState
+    ) -> dict[str, Any]:
         return {
             "route": ConversationRoute.GENERAL_QUESTION,
             "status": ConversationStatus.COMPLETED,
@@ -376,21 +395,18 @@ class ConversationNodes:
             "Conversation workflow planned",
             extra={
                 "workflow_type": workflow.workflow_type.value,
-                "steps": [
-                    step.value
-                    for step in workflow.steps
-                ],
+                "steps": [step.value for step in workflow.steps],
                 "current_step": (
-                    workflow.current_step.value
-                    if workflow.current_step
-                    else None
+                    workflow.current_step.value if workflow.current_step else None
                 ),
             },
         )
 
         return {"workflow": workflow}
 
-    async def execute_workflow_job_matching(self, state: ConversationState) -> dict[str, Any]:
+    async def execute_workflow_job_matching(
+        self, state: ConversationState
+    ) -> dict[str, Any]:
         workflow = state.get("workflow")
         cv_profile = state.get("cv_profile")
         search_result = state.get("job_search_result")
@@ -426,16 +442,20 @@ class ConversationNodes:
                 "workflow_job_matches": [],
                 "status": ConversationStatus.COMPLETED,
                 "assistant_message": (
-                    "Tôi chưa tìm thấy công việc phù hợp để "
-                    "thực hiện bước đánh giá CV."
+                    "Tôi chưa tìm thấy công việc phù hợp để thực hiện bước đánh giá CV."
                 ),
             }
 
-        tasks = [self._match_workflow_job(cv_profile=cv_profile, job=hit.job) for hit in candidates]
+        tasks = [
+            self._match_workflow_job(cv_profile=cv_profile, job=hit.job)
+            for hit in candidates
+        ]
 
         matches = await asyncio.gather(*tasks)
 
-        ranked_matches = sorted(matches, key=lambda item: item.match.overall_score, reverse=True)
+        ranked_matches = sorted(
+            matches, key=lambda item: item.match.overall_score, reverse=True
+        )
 
         updated_workflow = advance_workflow(
             workflow,
@@ -448,9 +468,7 @@ class ConversationNodes:
                 "candidate_count": len(candidates),
                 "matched_count": len(ranked_matches),
                 "best_score": (
-                    ranked_matches[0].match.overall_score
-                    if ranked_matches
-                    else None
+                    ranked_matches[0].match.overall_score if ranked_matches else None
                 ),
                 "next_step": updated_workflow.current_step.value,
             },
@@ -461,46 +479,53 @@ class ConversationNodes:
             "workflow": updated_workflow,
         }
 
-    async def execute_workflow_job_search(self, state: ConversationState) -> dict[str, Any]:
-            workflow = state.get("workflow")
-    
-            if workflow is None:
-                raise ValueError("Workflow plan is required for workflow job search.")
-    
-            request = JobSearchRequest(
-                query=state['message'],
-                page=1,
-                page_size=10,
-            )
-    
-            search_context = build_job_search_context(state.get("cv_profile"))
-    
-            result = await self._job_search_service.search(request, context=search_context)
-    
-            updated_workflow = advance_workflow(workflow, WorkflowStep.JOB_SEARCH,)
-    
-            logger.info(
-                "Workflow job search completed",
-                extra={
-                    "query": request.query,
-                    "returned_items": len(result.items),
-                    "next_step": updated_workflow.current_step.value,
-                },
-            )
-    
-            return {
-                "job_search_result": result,
-                "workflow": updated_workflow,
-            }
+    async def execute_workflow_job_search(
+        self, state: ConversationState
+    ) -> dict[str, Any]:
+        workflow = state.get("workflow")
 
-    async def execute_workflow_career_advice(self, state: ConversationState) -> dict[str, Any]:
+        if workflow is None:
+            raise ValueError("Workflow plan is required for workflow job search.")
+
+        request = JobSearchRequest(
+            query=self._get_contextual_message(state),
+            page=1,
+            page_size=10,
+        )
+
+        search_context = build_job_search_context(state.get("cv_profile"))
+
+        result = await self._job_search_service.search(request, context=search_context)
+
+        updated_workflow = advance_workflow(
+            workflow,
+            WorkflowStep.JOB_SEARCH,
+        )
+
+        logger.info(
+            "Workflow job search completed",
+            extra={
+                "query": request.query,
+                "returned_items": len(result.items),
+                "next_step": updated_workflow.current_step.value,
+            },
+        )
+
+        return {
+            "job_search_result": result,
+            "workflow": updated_workflow,
+        }
+
+    async def execute_workflow_career_advice(
+        self, state: ConversationState
+    ) -> dict[str, Any]:
         workflow = state.get("workflow")
 
         if workflow is None:
             raise ValueError("Workflow plan is required for workflow career advice.")
 
         advice_input = CareerAdviceInput(
-            user_request=state['message'],
+            user_request=self._get_contextual_message(state),
             cv_profile=state.get("cv_profile"),
         )
 
@@ -515,9 +540,7 @@ class ConversationNodes:
             "Workflow career advice completed",
             extra={
                 "is_personalized": result.is_personalized,
-                "recommended_role_count": len(
-                    result.recommended_roles
-                ),
+                "recommended_role_count": len(result.recommended_roles),
                 "next_step": updated_workflow.current_step.value,
             },
         )
@@ -533,7 +556,9 @@ class ConversationNodes:
         search_result = state.get("job_search_result")
 
         if matches:
-            lines = ["Tôi đã tìm và đánh giá các công việc phù hợp nhất với CV của bạn:"]
+            lines = [
+                "Tôi đã tìm và đánh giá các công việc phù hợp nhất với CV của bạn:"
+            ]
 
             for index, item in enumerate(matches, start=1):
                 job = item.job
@@ -542,8 +567,7 @@ class ConversationNodes:
                 company = job.company or "Không rõ công ty"
 
                 lines.append(
-                    f"{index}. {job.title} - {company}: "
-                    f"{match.overall_score:.1f}/100"
+                    f"{index}. {job.title} - {company}: {match.overall_score:.1f}/100"
                 )
 
             if career_advice is not None:
@@ -586,9 +610,11 @@ class ConversationNodes:
         )
 
         return {}
-   
+
     @staticmethod
-    def _build_clarification_message(*, missing_inputs: list[RequiredInput], generated_question: str | None) -> str:
+    def _build_clarification_message(
+        *, missing_inputs: list[RequiredInput], generated_question: str | None
+    ) -> str:
         missing_cv = RequiredInput.CV in missing_inputs
         missing_jd = RequiredInput.JOB_DESCRIPTION in missing_inputs
 
@@ -599,10 +625,7 @@ class ConversationNodes:
             )
 
         if missing_cv:
-            return (
-                "Vui lòng tải lên CV để tôi có thể thực hiện "
-                "yêu cầu này."
-            )
+            return "Vui lòng tải lên CV để tôi có thể thực hiện yêu cầu này."
 
         if missing_jd:
             return (
@@ -615,7 +638,7 @@ class ConversationNodes:
 
         return "Bạn có thể cung cấp thêm thông tin về yêu cầu không?"
 
-    @staticmethod 
+    @staticmethod
     def _build_job_search_message(result: JobSearchResult, *, used_cv: bool) -> str:
         returned_count = len(result.items)
 
@@ -636,7 +659,7 @@ class ConversationNodes:
             "cao nhất với yêu cầu tìm kiếm của bạn."
         )
 
-    @staticmethod 
+    @staticmethod
     def _build_job_matching_message(result: JobMatchingResult) -> str:
         recommendation_label = MATCH_RECOMMENDATION_LABELS[result.recommendation]
 
@@ -667,10 +690,7 @@ class ConversationNodes:
         if result.recommended_roles:
             primary_role = result.recommended_roles[0].role_title
 
-            return (
-                f"{prefix}hướng ưu tiên là "
-                f"{primary_role}. {result.summary}"
-            )
+            return f"{prefix}hướng ưu tiên là {primary_role}. {result.summary}"
 
         return f"{prefix}{result.summary}"
 
@@ -691,3 +711,59 @@ class ConversationNodes:
         result = await self._job_matching_service.match(matching_input)
 
         return WorkflowJobMatch(job=job, match=result)
+
+    async def prepare_turn(self, state: ConversationState) -> dict[str, Any]:
+        message = state["message"]
+        messages = state.get("messages", [])
+
+        conversation_history = format_conversation_history(
+            messages,
+            current_message=message,
+        )
+
+        contextual_message = build_contextual_user_message(
+            messages,
+            current_message=message,
+        )
+
+        logger.info(
+            "Conversation turn prepared",
+            extra={
+                "history_message_count": len(messages),
+                "has_previous_context": (
+                    conversation_history != "No previous conversation."
+                ),
+            },
+        )
+
+        return {
+            "conversation_history": conversation_history,
+            "contextual_message": contextual_message,
+            # Clear transient output from the previous turn.
+            "workflow": None,
+            "missing_inputs": [],
+            "cv_analysis_result": None,
+            "career_advice_result": None,
+            "cover_letter_result": None,
+            "job_search_result": None,
+            "job_matching_result": None,
+            "workflow_job_matches": [],
+        }
+
+    async def record_assistant_message(
+        self, state: ConversationState
+    ) -> dict[str, Any]:
+        assistant_message = state.get("assistant_message")
+
+        if not assistant_message:
+            return {}
+
+        return {
+            "messages": [
+                AIMessage(content=assistant_message),
+            ]
+        }
+
+    @staticmethod
+    def _get_contextual_message(state: ConversationState) -> str:
+        return state.get("contextual_message") or state["message"]

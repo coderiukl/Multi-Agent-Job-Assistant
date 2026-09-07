@@ -9,15 +9,19 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_serializer,
     field_validator,
     model_validator,
 )
 
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
+
 def normalize_single_line(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
 
 def normalize_multiline(value: str) -> str:
     normalized = value.replace("\r\n", "\n").replace("\r", "\n")
@@ -26,11 +30,13 @@ def normalize_multiline(value: str) -> str:
 
     return normalized.strip()
 
+
 class JobSchema(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         str_strip_whitespace=True,
     )
+
 
 class EmploymentType(StrEnum):
     FULL_TIME = "full_time"
@@ -41,11 +47,13 @@ class EmploymentType(StrEnum):
     TEMPORARY = "temporary"
     OTHER = "other"
 
+
 class WorkMode(StrEnum):
     ONSITE = "onsite"
     REMOTE = "remote"
     HYBRID = "hybrid"
     UNKNOWN = "unknown"
+
 
 class SeniorityLevel(StrEnum):
     INTERN = "intern"
@@ -58,6 +66,7 @@ class SeniorityLevel(StrEnum):
     DIRECTOR = "director"
     UNKNOWN = "unknown"
 
+
 class SalaryPeriod(StrEnum):
     HOURLY = "hourly"
     WEEKLY = "weekly"
@@ -66,6 +75,7 @@ class SalaryPeriod(StrEnum):
     ANNUAL = "annual"
     UNKNOWN = "unknown"
 
+
 class RawJob(JobSchema):
     source: str = Field(min_length=1, max_length=100)
     source_job_id: str = Field(min_length=1, max_length=255)
@@ -73,9 +83,11 @@ class RawJob(JobSchema):
     payload: dict[str, Any]
     crawled_at: datetime = Field(default_factory=utc_now)
 
+
 class CrawlPage(JobSchema):
     items: list[RawJob] = Field(default_factory=list)
     next_cursor: str | None = None
+
 
 class JobCandidate(JobSchema):
     title: str = Field(min_length=1, max_length=500)
@@ -152,7 +164,10 @@ class JobCandidate(JobSchema):
 
     @field_validator("salary_currency")
     @classmethod
-    def normalize_currency(cls, value: str | None,) -> str | None:
+    def normalize_currency(
+        cls,
+        value: str | None,
+    ) -> str | None:
         if value is None:
             return None
 
@@ -173,6 +188,11 @@ class JobCandidate(JobSchema):
             raise ValueError("salary_currency is required when salary is provided.")
 
         return self
+
+    @field_serializer("source_url")
+    def serialize_source_url(self, value: AnyHttpUrl) -> str:
+        return str(value)
+
 
 class NormalizedJob(JobCandidate):
     job_id: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")

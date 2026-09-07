@@ -9,6 +9,8 @@ langchain
 langgraph
 langsmith
 langchain-openai
+langgraph-checkpoint-postgres
+psycopg[binary,pool]>=3.2,<4
 
 qdrant-client
 

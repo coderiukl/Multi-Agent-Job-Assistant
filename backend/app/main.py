@@ -5,7 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.dependencies import close_job_search_resources
+from app.api.dependencies import (
+    close_job_search_resources,
+    start_conversation_memory_resources,
+)
 from app.api.router import create_api_router
 from app.core.config import get_settings
 from app.core.exception_handlers import register_exception_handlers
@@ -17,9 +20,12 @@ configure_logging(settings)
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
+
+    await start_conversation_memory_resources()
 
     logger.info(
         "Application started: %s version=%s environment=%s",
@@ -60,7 +66,7 @@ app.add_middleware(
         "X-Request-ID",
     ],
     expose_headers=["X-Request-ID"],
-    max_age=600
+    max_age=600,
 )
 
 app.add_middleware(RequestContextMiddleware)
