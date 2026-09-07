@@ -9,6 +9,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -173,6 +174,10 @@ class JobCandidate(JobSchema):
             raise ValueError("salary_currency is required when salary is provided.")
 
         return self
+
+    @field_serializer("source_url")
+    def serialize_source_url(self, value: AnyHttpUrl) -> str:
+        return str(value)
 
 class NormalizedJob(JobCandidate):
     job_id: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")

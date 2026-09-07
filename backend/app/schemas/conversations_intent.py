@@ -41,6 +41,7 @@ class ConversationRequest(BaseModel):
 
 class IntentAnalysisInput(BaseModel):
     message: str = Field(min_length=1, max_length=2000, description="Message sent by the user.")
+    conversation_history: str = Field(default="No previous conversation.", max_length=6_000)
     has_cv: bool = Field(default=False, description="Whether the request contains a CV.")
     has_jd: bool = Field(default=False, description="Whether the request contains a job description.")
 

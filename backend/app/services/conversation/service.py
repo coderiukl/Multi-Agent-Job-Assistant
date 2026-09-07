@@ -1,5 +1,6 @@
 from typing import cast, Any
 
+from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.graphs.conversation.state import ConversationState
@@ -40,6 +41,7 @@ class ConversationService:
     async def _invoke_graph(self, request: ConversationRequest, stop_after_intent: bool = False) -> ConversationState:
         initial_state: ConversationState = {
             "message": request.message,
+            "messages": HumanMessage(content=request.message),
         }
 
         if request.cv_id is not None:

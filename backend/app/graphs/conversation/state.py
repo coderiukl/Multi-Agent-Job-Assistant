@@ -1,4 +1,7 @@
-from typing import TypedDict
+from typing import TypedDict, Annotated
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 
 from app.schemas.conversation import (
     ConversationRoute,
@@ -15,8 +18,13 @@ from app.schemas.cover_letter import CoverLetterResult
 from app.schemas.workflow import WorkflowPlan, WorkflowJobMatch
 
 class ConversationState(TypedDict, total=False):
+    messages: Annotated[list[AnyMessage], add_messages]
+
     # Dữ liệu từ request
     message: str
+    contextual_message: str
+    conversation_history: str   
+
     cv_id: str | None
     job_description: str | None
 
