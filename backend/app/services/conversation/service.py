@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import cast, Any
 from uuid import UUID
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -75,9 +75,15 @@ class ConversationService:
             messages=messages,
         )
 
-    async def analyze_intent(
-        self, request: ConversationRequest
-    ) -> IntentAnalysisResult:
+    async def delete_history(self, thread_id: UUID) -> None:
+        checkpointer = self._graph.checkpointer
+
+        if checkpointer is None:
+            return
+
+        await checkpointer.adelete_thread(str(thread_id))
+    
+    async def analyze_intent(self, request: ConversationRequest) -> IntentAnalysisResult:
         state = await self._invoke_graph(request, stop_after_intent=True)
 
         return state["intent"]
@@ -117,3 +123,4 @@ class ConversationService:
             return content.strip()
 
         return str(content).strip()
+

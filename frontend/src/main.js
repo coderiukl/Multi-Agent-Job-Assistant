@@ -1,4 +1,5 @@
 import {
+  deleteConversationHistory,
   getConversationHistory,
   searchJobs,
   sendConversationMessage,
@@ -10,8 +11,7 @@ import "./styles.css";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const CONVERSATION_THREAD_KEY = "multi-agent-job-assistant-thread-id";
-const CONVERSATION_THREADS_KEY =
-  "multi-agent-job-assistant-conversation-threads";
+const CONVERSATION_THREADS_KEY = "multi-agent-job-assistant-conversation-threads";
 
 const MAX_SAVED_CONVERSATIONS = 30;
 const MAX_CONVERSATION_TITLE_LENGTH = 55;
@@ -168,7 +168,8 @@ function loadConversationThreads() {
         (item) =>
           typeof item?.threadId === "string" &&
           typeof item?.title === "string" &&
-          typeof item?.updatedAt === "string",
+          typeof item?.updatedAt === "string" &&
+          item?.isDraft !== true,
       )
       .slice(0, MAX_SAVED_CONVERSATIONS);
   } catch {
@@ -254,11 +255,24 @@ function renderConversationHistory() {
     state.conversationThreads.length > 0;
 
   for (const thread of state.conversationThreads) {
+    const row = document.createElement("div");
     const button = document.createElement("button");
+    const deleteButton = document.createElement("button");
 
+    row.className = "conversation-history-row";
     button.type = "button";
     button.className = "conversation-history-item";
     button.dataset.threadId = thread.threadId;
+
+    deleteButton.type = "button";
+    deleteButton.className = "conversation-history-delete";
+    deleteButton.dataset.deleteThreadId = thread.threadId;
+    deleteButton.setAttribute(
+      "aria-label",
+      `Xóa cuộc trò chuyện ${thread.title}`,
+    );
+    deleteButton.title = "Xóa cuộc trò chuyện";
+    deleteButton.textContent = "×";
 
     const isActive = thread.threadId === state.threadId;
 
@@ -281,7 +295,8 @@ function renderConversationHistory() {
     );
 
     button.append(title, time);
-    list.append(button);
+    row.append(button, deleteButton);
+    list.append(row);
   }
 }
 
@@ -313,7 +328,18 @@ function formatConversationTime(value) {
   }).format(date);
 }
 
-function handleConversationHistoryClick(event) {
+async function handleConversationHistoryClick(event) {
+  const deleteButton = event.target.closest(
+    "[data-delete-thread-id]",
+  );
+
+  if (deleteButton) {
+    await deleteConversationThread(
+      deleteButton.dataset.deleteThreadId,
+    );
+    return;
+  }
+
   const button = event.target.closest(
     "[data-thread-id]",
   );
@@ -332,6 +358,46 @@ function handleConversationHistoryClick(event) {
 
   // Reload để reset toàn bộ workspace và gọi API restore history.
   window.location.reload();
+}
+
+
+async function deleteConversationThread(threadId) {
+  if (!threadId) {
+    return;
+  }
+
+  const thread = state.conversationThreads.find(
+    (item) => item.threadId === threadId,
+  );
+  const confirmed = window.confirm(
+    `Xóa cuộc trò chuyện “${thread?.title ?? "này"}”?`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await deleteConversationHistory(threadId);
+  } catch (error) {
+    showError(
+      error?.message ??
+      "Không thể xóa cuộc trò chuyện.",
+    );
+    return;
+  }
+
+  state.conversationThreads = state.conversationThreads.filter(
+    (item) => item.threadId !== threadId,
+  );
+  saveConversationThreads();
+
+  if (threadId === state.threadId) {
+    resetConversation();
+    return;
+  }
+
+  renderConversationHistory();
 }
 
 initializeApplication().catch((error) => {
@@ -373,6 +439,17 @@ async function restoreConversationHistory() {
       addMessage({
         role: message.role,
         text: message.text,
+      });
+    }
+
+    const firstUserMessage = history.messages.find(
+      (message) => message.role === "user",
+    );
+
+    if (firstUserMessage) {
+      rememberConversationThread({
+        threadId: history.threadId,
+        firstMessage: firstUserMessage.text,
       });
     }
 
@@ -750,6 +827,11 @@ async function handleSubmit(event) {
     text: message,
   });
 
+  rememberConversationThread({
+    threadId: state.threadId,
+    firstMessage: message,
+  });
+
   elements.messageInput.value = "";
   resizeMessageInput();
   elements.suggestionList.hidden = true;
@@ -769,11 +851,6 @@ async function handleSubmit(event) {
     if (conversation.threadId) {
       saveThreadId(conversation.threadId);
     }
-
-    rememberConversationThread({
-      threadId: state.threadId,
-      firstMessage: message,
-    });
 
     removeTypingIndicator();
 
@@ -3538,8 +3615,9 @@ function showJobErrorState() {
 
 
 function resetConversation() {
-  saveThreadId(createThreadId());
-  renderConversationHistory();
+  const nextThreadId = createThreadId();
+
+  saveThreadId(nextThreadId);
   state.messages = [];
   state.jobs = [];
   state.currentSearchResult = null;
