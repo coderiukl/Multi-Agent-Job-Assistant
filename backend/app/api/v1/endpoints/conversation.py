@@ -26,6 +26,21 @@ async def get_conversation_history(
         data=result,
     )
 
+@router.delete(
+    "/threads/{thread_id}",
+    response_model=ApiResponse[dict[str, bool]],
+    status_code=status.HTTP_200_OK,
+)
+async def delete_conversation_history(
+    thread_id: UUID,
+    conversation_service: ConversationServiceDependency,
+) -> ApiResponse[dict[str, bool]]:
+    await conversation_service.delete_history(thread_id)
+
+    return ApiResponse(
+        message="Conversation history deleted successfully.",
+        data={"deleted": True},
+    )
 
 @router.post(
     "/messages",

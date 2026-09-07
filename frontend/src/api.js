@@ -73,6 +73,18 @@ export async function getConversationHistory(threadId) {
   };
 }
 
+export async function deleteConversationHistory(threadId) {
+  const encodedThreadId = encodeURIComponent(threadId);
+
+  await requestJson(
+    `/api/v1/conversation/threads/${encodedThreadId}`,
+    {
+      method: "DELETE",
+    },
+    "Không thể xóa cuộc trò chuyện.",
+  );
+}
+
 export async function searchJobs({
   query,
   filters = {},
