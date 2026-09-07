@@ -1,5 +1,6 @@
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.checkpoint.base import BaseCheckpointSaver   
 
 from app.graphs.conversation.nodes import ConversationNodes
 from app.graphs.conversation.routing import (
@@ -11,9 +12,15 @@ from app.graphs.conversation.routing import (
     route_workflow_start,
 )
 from app.graphs.conversation.state import ConversationState
+
 from app.schemas.conversation import ConversationRoute
 
-def build_conversation_graph(nodes: ConversationNodes) -> CompiledStateGraph:
+def build_conversation_graph(
+    nodes: ConversationNodes, 
+    *, 
+    checkpointer: BaseCheckpointSaver | None = None,
+) -> CompiledStateGraph:
+
     graph = StateGraph(ConversationState)
 
     # Core conversations nodes
@@ -123,4 +130,4 @@ def build_conversation_graph(nodes: ConversationNodes) -> CompiledStateGraph:
     graph.add_edge("job_search", END)
     graph.add_edge("job_matching", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
