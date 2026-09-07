@@ -74,7 +74,7 @@ Classification rules:
 11. Use clarification only when the request appears related to the supported scope 
 but its intended task cannot be determined.
 
-12. When a specialized task is recognized but its required CV or job description is missing:
+12. When a specialized task is recognized but its required input is missing:
   - keep the specialized intent as primary_intent;
   - set the corresponding requires_cv or requires_jd to true;
   - set needs_clarification to true;

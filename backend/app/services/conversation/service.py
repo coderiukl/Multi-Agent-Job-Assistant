@@ -1,12 +1,15 @@
-from typing import cast, Any
-from uuid import UUID, uuid4
+from typing import Any, cast
+from uuid import UUID
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.graphs.conversation.state import ConversationState
-
-from app.schemas.conversation import ConversationResponseData, ConversationHistoryData, ConversationMessageData
+from app.schemas.conversation import (
+    ConversationHistoryData,
+    ConversationMessageData,
+    ConversationResponseData,
+)
 from app.schemas.conversations_intent import ConversationRequest, IntentAnalysisResult
 
 
@@ -23,7 +26,7 @@ class ConversationService:
             status=state["status"],
             route=state["route"],
             intent=state["intent"],
-            cv_id=request.cv_id,
+            cv_id=state.get("cv_id"),
             missing_inputs=state.get("missing_inputs", []),
             workflow=state.get("workflow"),
             cv_analysis_result=state.get("cv_analysis_result"),
@@ -61,11 +64,7 @@ class ConversationService:
 
             messages.append(
                 ConversationMessageData(
-                    message_id=(
-                        str(message.id)
-                        if message.id is not None
-                        else None
-                    ),
+                    message_id=(str(message.id) if message.id is not None else None),
                     role=role,
                     content=content,
                 )
@@ -75,16 +74,20 @@ class ConversationService:
             thread_id=thread_id,
             messages=messages,
         )
-    
-    async def analyze_intent(self, request: ConversationRequest) -> IntentAnalysisResult:
+
+    async def analyze_intent(
+        self, request: ConversationRequest
+    ) -> IntentAnalysisResult:
         state = await self._invoke_graph(request, stop_after_intent=True)
 
-        return state['intent']
-    
-    async def _invoke_graph(self, request: ConversationRequest, stop_after_intent: bool = False) -> ConversationState:
+        return state["intent"]
+
+    async def _invoke_graph(
+        self, request: ConversationRequest, stop_after_intent: bool = False
+    ) -> ConversationState:
         initial_state: ConversationState = {
             "message": request.message,
-            "messages": HumanMessage(content=request.message),
+            "messages": [HumanMessage(content=request.message)],
         }
 
         if request.cv_id is not None:
@@ -101,9 +104,7 @@ class ConversationService:
 
         if stop_after_intent:
             result = await self._graph.ainvoke(
-                initial_state,
-                config=config,
-                interrupt_after=["analyze_intent"]
+                initial_state, config=config, interrupt_after=["analyze_intent"]
             )
         else:
             result = await self._graph.ainvoke(initial_state, config=config)

@@ -10,6 +10,7 @@ from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
+
 class ConversationMemory:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -47,7 +48,7 @@ class ConversationMemory:
                 "autocommit": True,
                 "prepare_threshold": 0,
                 "row_factory": dict_row,
-            }
+            },
         )
 
         await self._pool.open()
@@ -82,18 +83,11 @@ class ConversationMemory:
             )
 
         if database_url.startswith("postgresql+asyncpg://"):
-            return database_url.replace(
-                "postgresql+asyncpg://",
-                "postgresql://",
-                1
-            )
+            return database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
         if database_url.startswith("postgresql://"):
             return database_url
 
         raise ValueError(
-            "JOB_DATABASE_URL must use postgresql+asyncpg:// "
-            "or postgresql://."
+            "JOB_DATABASE_URL must use postgresql+asyncpg:// or postgresql://."
         )
-        
-                

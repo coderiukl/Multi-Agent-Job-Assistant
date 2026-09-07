@@ -20,6 +20,7 @@ configure_logging(settings)
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
@@ -65,7 +66,7 @@ app.add_middleware(
         "X-Request-ID",
     ],
     expose_headers=["X-Request-ID"],
-    max_age=600
+    max_age=600,
 )
 
 app.add_middleware(RequestContextMiddleware)

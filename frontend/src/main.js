@@ -10,6 +10,8 @@ import "./styles.css";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const CONVERSATION_THREAD_KEY = "multi-agent-job-assistant-thread-id";
+const CONVERSATION_THREADS_KEY =
+  "multi-agent-job-assistant-conversation-threads";
 
 const MAX_SAVED_CONVERSATIONS = 30;
 const MAX_CONVERSATION_TITLE_LENGTH = 55;

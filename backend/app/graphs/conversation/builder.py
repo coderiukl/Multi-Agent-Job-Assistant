@@ -1,6 +1,6 @@
-from langgraph.graph import START, END, StateGraph
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.checkpoint.base import BaseCheckpointSaver   
 
 from app.graphs.conversation.nodes import ConversationNodes
 from app.graphs.conversation.routing import (
@@ -12,12 +12,12 @@ from app.graphs.conversation.routing import (
     route_workflow_start,
 )
 from app.graphs.conversation.state import ConversationState
-
 from app.schemas.conversation import ConversationRoute
 
+
 def build_conversation_graph(
-    nodes: ConversationNodes, 
-    *, 
+    nodes: ConversationNodes,
+    *,
     checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
 
@@ -53,8 +53,8 @@ def build_conversation_graph(
     graph.add_edge("resolve_context", "analyze_intent")
 
     graph.add_conditional_edges(
-        "analyze_intent", 
-        route_after_analysis, 
+        "analyze_intent",
+        route_after_analysis,
         {
             IntentGateRoute.CLARIFICATION: "clarification",
             IntentGateRoute.PLAN_WORKFLOW: "plan_workflow",
