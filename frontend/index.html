@@ -35,6 +35,18 @@
           </span>
 
           <button
+            id="toggle-results-button"
+            class="results-toggle-button"
+            type="button"
+            aria-expanded="false"
+            aria-controls="results-panel"
+            hidden
+          >
+            <span aria-hidden="true">▣</span>
+            <span class="results-toggle-label">Xem kết quả</span>
+          </button>
+
+          <button
             id="new-chat-button"
             class="secondary-button"
             type="button"
@@ -61,12 +73,14 @@
         </button>
 
         <button
+          id="mobile-results-tab"
           type="button"
           class="mobile-tab"
           data-panel="results"
           aria-controls="results-panel"
           aria-selected="false"
           role="tab"
+          hidden
         >
           Kết quả
           <span id="mobile-results-badge" class="mobile-tab-badge" hidden>
@@ -75,7 +89,56 @@
         </button>
       </nav>
 
-      <main class="workspace" data-active-panel="chat">
+      <main
+        class="workspace"
+        data-active-panel="chat"
+        data-history-open="true"
+        data-results-open="false"
+      >
+        <aside class="conversation-sidebar" aria-label="Lịch sử trò chuyện">
+          <header class="conversation-sidebar-header">
+            <div class="conversation-sidebar-heading">
+              <span class="eyebrow">HISTORY</span>
+              <h2>Cuộc trò chuyện</h2>
+            </div>
+
+            <div class="conversation-sidebar-actions">
+              <button
+                id="sidebar-new-chat-button"
+                class="icon-button"
+                type="button"
+                aria-label="Tạo cuộc trò chuyện mới"
+                title="Cuộc trò chuyện mới"
+              >
+                +
+              </button>
+
+              <button
+                id="toggle-history-button"
+                class="icon-button history-toggle-button"
+                type="button"
+                aria-label="Thu gọn lịch sử"
+                aria-expanded="true"
+                title="Thu gọn lịch sử"
+              >
+                <span aria-hidden="true">‹</span>
+              </button>
+            </div>
+          </header>
+
+          <div
+            id="conversation-history-empty"
+            class="conversation-history-empty"
+          >
+            Chưa có cuộc trò chuyện nào.
+          </div>
+
+          <div
+            id="conversation-history-list"
+            class="conversation-history-list"
+          ></div>
+        </aside>
+        
         <section id="chat-panel" class="chat-panel" aria-label="Trợ lý hội thoại" role="tabpanel">
           <header class="panel-header">
             <div>
@@ -312,7 +375,13 @@
           </footer>
         </section>
 
-        <section id="results-panel" class="results-panel" aria-label="Kết quả công việc" role="tabpanel">
+        <section
+          id="results-panel"
+          class="results-panel"
+          aria-label="Kết quả công việc"
+          aria-hidden="true"
+          role="tabpanel"
+        >
           <header class="results-header">
             <div class="results-heading">
               <button
@@ -330,15 +399,27 @@
               </div>
             </div>
 
-            <select
-              id="job-sort"
-              class="sort-select"
-              aria-label="Sắp xếp công việc"
-              disabled
-            >
-              <option value="relevance">Phù hợp nhất</option>
-              <option value="newest">Mới nhất</option>
-            </select>
+            <div class="results-header-actions">
+              <select
+                id="job-sort"
+                class="sort-select"
+                aria-label="Sắp xếp công việc"
+                disabled
+              >
+                <option value="relevance">Phù hợp nhất</option>
+                <option value="newest">Mới nhất</option>
+              </select>
+
+              <button
+                id="close-results-button"
+                class="panel-close-button"
+                type="button"
+                aria-label="Đóng khu vực kết quả"
+                title="Đóng kết quả"
+              >
+                ×
+              </button>
+            </div>
           </header>
 
           <section

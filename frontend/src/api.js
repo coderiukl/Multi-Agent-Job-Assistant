@@ -15,6 +15,7 @@ export class ApiError extends Error {
 }
 
 export async function sendConversationMessage({
+  threadId,
   message,
   cvId = null,
   jobDescription = null,
@@ -27,6 +28,7 @@ export async function sendConversationMessage({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        thread_id: threadId,
         message,
         cv_id: cvId,
         job_description: jobDescription,
@@ -37,6 +39,38 @@ export async function sendConversationMessage({
 
   return normalizeConversationResponse(responseBody)
 
+}
+
+export async function getConversationHistory(threadId) {
+  const encodedThreadId = encodeURIComponent(threadId);
+
+  const responseBody = await requestJson(
+    `/api/v1/conversation/threads/${encodedThreadId}/messages`,
+    {
+      method: "GET",
+    },
+    "Không thể tải lịch sử cuộc trò chuyện.",
+  );
+
+  const data = responseBody?.data ?? responseBody;
+
+  return {
+    threadId: data?.thread_id ?? threadId,
+    messages: Array.isArray(data?.messages)
+      ? data.messages
+          .filter(
+            (message) =>
+              message?.role === "user" ||
+              message?.role === "assistant",
+          )
+          .map((message) => ({
+            id: message?.message_id ?? crypto.randomUUID(),
+            role: message.role,
+            text: message?.content ?? "",
+          }))
+          .filter((message) => message.text.trim())
+      : [],
+  };
 }
 
 export async function searchJobs({
@@ -138,6 +172,7 @@ function normalizeConversationResponse(responseBody) {
   const intent = data?.intent ?? {};
 
   return {
+    threadId: data?.thread_id ?? null,
     answer: data?.assistant_message ?? "Hệ thống đã tiếp nhận yêu cầu của bạn.",
     status: data?.status ?? "completed",
     route: data?.route ?? "general_question",

@@ -1,12 +1,26 @@
 from fastapi import APIRouter, status
+from uuid import UUID
 
 from app.api.dependencies import ConversationServiceDependency
-from app.schemas.conversation import ConversationResponseData
+from app.schemas.conversation import ConversationResponseData, ConversationHistoryData
 from app.schemas.conversations_intent import ConversationRequest, IntentAnalysisResult
 from app.schemas.response import ApiResponse
 from app.schemas.error import ErrorResponse
 
 router = APIRouter()
+
+@router.get(
+    "/threads/{thread_id}/messages",
+    response_model=ApiResponse[ConversationHistoryData],
+    status_code=status.HTTP_200_OK,
+)
+async def get_conversation_history(thread_id: UUID, conversation_service: ConversationServiceDependency) -> ApiResponse[ConversationHistoryData]:
+    result = await conversation_service.get_history(thread_id)
+
+    return ApiResponse(
+        message="Conversation history retrieved successfully.",
+        data=result,
+    )
 
 @router.post(
     "/messages",

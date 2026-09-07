@@ -1,11 +1,12 @@
 from typing import cast, Any
+from uuid import UUID, uuid4
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.graphs.conversation.state import ConversationState
 
-from app.schemas.conversation import ConversationResponseData
+from app.schemas.conversation import ConversationResponseData, ConversationHistoryData, ConversationMessageData
 from app.schemas.conversations_intent import ConversationRequest, IntentAnalysisResult
 
 
@@ -31,6 +32,48 @@ class ConversationService:
             job_search_result=state.get("job_search_result"),
             job_matching_result=state.get("job_matching_result"),
             workflow_job_matches=state.get("workflow_job_matches", []),
+        )
+
+    async def get_history(self, thread_id: UUID) -> ConversationHistoryData:
+        config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": str(thread_id),
+            }
+        }
+
+        snapshot = await self._graph.aget_state(config)
+        stored_messages = snapshot.values.get("messages", [])
+
+        messages: list[ConversationMessageData] = []
+
+        for message in stored_messages:
+            if isinstance(message, HumanMessage):
+                role = "user"
+            elif isinstance(message, AIMessage):
+                role = "assistant"
+            else:
+                continue
+
+            content = self._get_message_content(message.content)
+
+            if not content:
+                continue
+
+            messages.append(
+                ConversationMessageData(
+                    message_id=(
+                        str(message.id)
+                        if message.id is not None
+                        else None
+                    ),
+                    role=role,
+                    content=content,
+                )
+            )
+
+        return ConversationHistoryData(
+            thread_id=thread_id,
+            messages=messages,
         )
     
     async def analyze_intent(self, request: ConversationRequest) -> IntentAnalysisResult:
@@ -66,3 +109,10 @@ class ConversationService:
             result = await self._graph.ainvoke(initial_state, config=config)
 
         return cast(ConversationState, result)
+
+    @staticmethod
+    def _get_message_content(content: Any) -> str:
+        if isinstance(content, str):
+            return content.strip()
+
+        return str(content).strip()
