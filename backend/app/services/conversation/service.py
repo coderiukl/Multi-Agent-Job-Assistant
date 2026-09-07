@@ -1,4 +1,4 @@
-from typing import cast
+from typing import cast, Any
 
 from langgraph.graph.state import CompiledStateGraph
 
@@ -40,16 +40,27 @@ class ConversationService:
     async def _invoke_graph(self, request: ConversationRequest, stop_after_intent: bool = False) -> ConversationState:
         initial_state: ConversationState = {
             "message": request.message,
-            "cv_id": request.cv_id,
-            "job_description": request.job_description,
+        }
+
+        if request.cv_id is not None:
+            initial_state["cv_id"] = request.cv_id
+
+        if request.job_description is not None:
+            initial_state["job_description"] = request.job_description
+
+        config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": str(request.thread_id),
+            }
         }
 
         if stop_after_intent:
             result = await self._graph.ainvoke(
                 initial_state,
+                config=config,
                 interrupt_after=["analyze_intent"]
             )
         else:
-            result = await self._graph.ainvoke(initial_state)
+            result = await self._graph.ainvoke(initial_state, config=config)
 
         return cast(ConversationState, result)

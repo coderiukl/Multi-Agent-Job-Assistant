@@ -45,7 +45,7 @@ from app.services.pdf import (
     PdfTextMerger,
 )
 from app.vectorstores import QdrantJobVectorIndex, create_qdrant_client
-
+from app.memory import ConversationMemory
 
 @lru_cache
 def get_storage_service() -> StorageService:
@@ -242,6 +242,11 @@ JobSearchServiceDependency = Annotated[
 
 async def close_job_search_resources() -> None:
     get_conversation_graph.cache_clear()
+
+    if get_conversation_memory.cache_info().currsize:
+        await get_conversation_memory().close()
+
+    get_conversation_memory.cache_clear()
    
     if get_job_qdrant_client.cache_info().currsize:
         await get_job_qdrant_client().close()
@@ -291,6 +296,14 @@ JobMatchingServiceDependency = Annotated[
 ]
 
 @lru_cache
+def get_conversation_memory() -> ConversationMemory:
+    return ConversationMemory(get_settings())
+
+
+async def start_conversation_memory_resources() -> None:
+    await get_conversation_memory().start()
+
+@lru_cache
 def get_conversation_graph() -> CompiledStateGraph:
     analyzer = ConversationIntentAnalyzer(llm=get_chat_model())
     nodes = ConversationNodes(
@@ -303,7 +316,7 @@ def get_conversation_graph() -> CompiledStateGraph:
         job_matching_service=get_job_matching_service(),
     )
 
-    return build_conversation_graph(nodes)
+    return build_conversation_graph(nodes, checkpointer=get_conversation_memory().checkpointer)
 
 ConversationGraphDependency = Annotated[
     CompiledStateGraph,

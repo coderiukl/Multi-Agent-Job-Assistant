@@ -111,6 +111,17 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "jobs_bge_m3_v1"
     qdrant_timeout_seconds: float = Field(default=30.0, gt=0)
 
+    # Conversation Memory
+    conversation_memory_backend: Literal[
+        "memory",
+        "postgres",
+    ] = "memory"
+    conversation_memory_pool_size: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
+
     # Upload size conversion
     @property
     def max_upload_size_bytes(self) -> int:
