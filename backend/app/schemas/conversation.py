@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -31,6 +32,15 @@ class ConversationStatus(StrEnum):
 class RequiredInput(StrEnum):
     CV = "cv"
     JOB_DESCRIPTION = "job_description"
+
+class ConversationMessageData(BaseModel):
+    message_id: str | None = None
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+class ConversationHistoryData(BaseModel):
+    thread_id: UUID
+    messages: list[ConversationMessageData] = Field(default_factory=list)
 
 class ConversationResponseData(BaseModel):
     thread_id: UUID
