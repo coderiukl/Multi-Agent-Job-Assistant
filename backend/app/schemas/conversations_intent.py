@@ -1,4 +1,5 @@
 from enum import StrEnum
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, model_validator, field_validator
 
@@ -14,6 +15,7 @@ class ConversationIntent(StrEnum):
     CLARIFICATION = "clarification"
 
 class ConversationRequest(BaseModel):
+    thread_id: UUID = Field(default_factory=uuid4)
     message: str = Field(min_length=1, max_length=2000)
     cv_id: str | None = Field(default=None, max_length=100)
     job_description: str | None = Field(default=None, max_length=20_000)

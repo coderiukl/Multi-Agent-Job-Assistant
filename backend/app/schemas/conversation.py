@@ -1,4 +1,5 @@
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +33,7 @@ class RequiredInput(StrEnum):
     JOB_DESCRIPTION = "job_description"
 
 class ConversationResponseData(BaseModel):
+    thread_id: UUID
     assistant_message: str = Field(min_length=1)
     status: ConversationStatus
     route: ConversationRoute

@@ -16,6 +16,7 @@ class ConversationService:
         state = await self._invoke_graph(request)
 
         return ConversationResponseData(
+            thread_id=request.thread_id,
             assistant_message=state["assistant_message"],
             status=state["status"],
             route=state["route"],
@@ -46,7 +47,7 @@ class ConversationService:
         if stop_after_intent:
             result = await self._graph.ainvoke(
                 initial_state,
-                interrupt_after=["analyzer_intent"]
+                interrupt_after=["analyze_intent"]
             )
         else:
             result = await self._graph.ainvoke(initial_state)
