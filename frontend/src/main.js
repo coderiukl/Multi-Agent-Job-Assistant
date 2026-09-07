@@ -24,6 +24,9 @@ const state = {
   currentCareerAdviceResult: null,
   currentCoverLetterResult: null,
 
+  currentWorkflow: null,
+  workflowJobMatches: [],
+
   isSending: false,
   jobs: [],
   currentSearchResult: null,
@@ -349,7 +352,16 @@ async function handleSubmit(event) {
       text: conversation.answer,
     });
 
-    if (conversation.route === "job_search") {
+    state.currentWorkflow = conversation.workflow;
+    state.workflowJobMatches = conversation.workflowJobMatches;
+
+    if (conversation.route === "job_search" && conversation.workflowJobMatches.length) {
+      renderWorkflowJobRecommendations(
+        conversation.jobSearchResult,
+        conversation.workflowJobMatches,
+        conversation.careerAdviceResult,
+      );
+    } else if (conversation.route === "job_search") {
       await handleJobSearchConversation(
         message,
         conversation.jobSearchResult,
@@ -950,6 +962,263 @@ async function matchSelectedJob(hit) {
   }
 }
 
+function renderWorkflowJobRecommendations(
+  searchResult,
+  matches,
+  careerAdvice,
+) {
+  const normalizedMatches =
+    Array.isArray(matches)
+      ? matches
+      : [];
+
+  state.currentSearchResult = searchResult;
+  state.workflowJobMatches =
+    normalizedMatches;
+
+  state.jobs = normalizedMatches.map(
+    (item) => ({
+      job: item.job,
+      workflowMatch: item.match,
+    }),
+  );
+
+  elements.resultsEyebrow.textContent =
+    "AI JOB RECOMMENDATION";
+
+  elements.resultsTitle.textContent =
+    "Công việc phù hợp nhất";
+
+  elements.resultsSummary.hidden = false;
+  elements.jobSort.disabled = true;
+  elements.backToJobsButton.hidden = true;
+
+  elements.resultCount.textContent =
+    `${normalizedMatches.length} công việc phù hợp nhất với CV`;
+
+  elements.searchStrategy.textContent =
+    "Multi-Agent Matching";
+
+  updateMobileResultsBadge(
+    normalizedMatches.length,
+  );
+
+  showResultsPanelOnMobile();
+
+  if (!normalizedMatches.length) {
+    showNoJobResults();
+    return;
+  }
+
+  elements.jobResults.innerHTML = `
+    <section
+      class="workflow-recommendations"
+      aria-label="Danh sách công việc phù hợp"
+    >
+      ${normalizedMatches
+        .map(
+          (item, index) =>
+            renderWorkflowJobCard(
+              item,
+              index,
+            ),
+        )
+        .join("")}
+
+      ${
+        careerAdvice
+          ? renderWorkflowCareerSummary(
+              careerAdvice,
+            )
+          : ""
+      }
+    </section>
+  `;
+}
+
+function renderWorkflowJobCard(
+  item,
+  index,
+) {
+  const job = item?.job ?? {};
+  const match = item?.match ?? {};
+
+  const score = clampMatchingScore(
+    match.overallScore,
+  );
+
+  const title =
+    job.title ||
+    "Vị trí chưa xác định";
+
+  const company =
+    job.company ||
+    "Chưa rõ công ty";
+
+  const location =
+    job.location ||
+    "Chưa rõ địa điểm";
+
+  const strengths =
+    Array.isArray(match.strengths)
+      ? match.strengths.slice(0, 3)
+      : [];
+
+  const gaps =
+    Array.isArray(match.gaps)
+      ? match.gaps.slice(0, 3)
+      : [];
+
+  return `
+    <article class="workflow-job-card">
+      <header class="workflow-job-header">
+        <div class="workflow-job-rank">
+          #${index + 1}
+        </div>
+
+        <div class="workflow-job-title">
+          <h3>${escapeHtml(title)}</h3>
+
+          <p>
+            ${escapeHtml(company)}
+            ·
+            ${escapeHtml(location)}
+          </p>
+        </div>
+
+        <div class="workflow-match-score">
+          <strong>
+            ${score.toFixed(1)}
+          </strong>
+          <span>/100</span>
+        </div>
+      </header>
+
+      <div class="workflow-match-meta">
+        <span class="recommendation-badge">
+          ${escapeHtml(
+            getRecommendationLabel(
+              match.recommendation,
+            ),
+          )}
+        </span>
+      </div>
+
+      <div class="workflow-match-columns">
+        <section>
+          <h4>Điểm mạnh</h4>
+
+          ${
+            strengths.length
+              ? `
+                <ul>
+                  ${strengths
+                    .map(
+                      (strength) =>
+                        `<li>${escapeHtml(
+                          strength,
+                        )}</li>`,
+                    )
+                    .join("")}
+                </ul>
+              `
+              : "<p>Chưa có dữ liệu.</p>"
+          }
+        </section>
+
+        <section>
+          <h4>Khoảng trống</h4>
+
+          ${
+            gaps.length
+              ? `
+                <ul>
+                  ${gaps
+                    .map(
+                      (gap) =>
+                        `<li>${escapeHtml(
+                          gap,
+                        )}</li>`,
+                    )
+                    .join("")}
+                </ul>
+              `
+              : "<p>Chưa có khoảng trống đáng kể.</p>"
+          }
+        </section>
+      </div>
+
+      <div class="workflow-job-actions">
+        <button
+          type="button"
+          class="secondary-button"
+          data-action="view-job"
+          data-job-id="${escapeHtml(
+            job.job_id ?? "",
+          )}"
+        >
+          Xem công việc
+        </button>
+
+        <button
+          type="button"
+          class="primary-button"
+          data-action="cover-letter-job"
+          data-job-id="${escapeHtml(
+            job.job_id ?? "",
+          )}"
+        >
+          Viết Cover Letter
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderWorkflowCareerSummary(
+  advice,
+) {
+  const skills =
+    Array.isArray(advice.topPrioritySkills)
+      ? advice.topPrioritySkills
+      : [];
+
+  return `
+    <section class="workflow-career-summary">
+      <span class="career-personalization-badge personalized">
+        Career Advisor
+      </span>
+
+      <h3>
+        Bạn nên cải thiện gì tiếp theo?
+      </h3>
+
+      <p>
+        ${escapeHtml(
+          advice.summary ||
+          "Chưa có nhận xét.",
+        )}
+      </p>
+
+      ${
+        skills.length
+          ? `
+            <div class="career-skill-chips">
+              ${skills
+                .map(
+                  (skill) =>
+                    `<span>${escapeHtml(
+                      skill,
+                    )}</span>`,
+                )
+                .join("")}
+            </div>
+          `
+          : ""
+      }
+    </section>
+  `;
+}
 
 function renderJobSearchResult(result) {
   const items = Array.isArray(result?.items)
@@ -2844,6 +3113,8 @@ function resetConversation() {
   state.lastSearchQuery = "";
   state.currentSort = "relevance";
   state.selectedJob = null;
+  state.currentWorkflow = null;
+  state.workflowJobMatches = [];
   state.currentMatchingResult = null;
   state.currentCvAnalysisResult = null;
   state.currentCareerAdviceResult = null;

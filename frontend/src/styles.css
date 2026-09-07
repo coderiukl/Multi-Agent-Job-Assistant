@@ -2426,6 +2426,94 @@ a {
   background: var(--border-strong);
 }
 
+.workflow-recommendations {
+  display: grid;
+  gap: 16px;
+}
+
+.workflow-job-card {
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--surface-color, #fff);
+}
+
+.workflow-job-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.workflow-job-rank {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workflow-job-title h3 {
+  margin: 0;
+}
+
+.workflow-job-title p {
+  margin: 6px 0 0;
+}
+
+.workflow-match-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.workflow-match-score strong {
+  font-size: 26px;
+}
+
+.workflow-match-score span {
+  font-size: 13px;
+}
+
+.workflow-match-meta {
+  margin-top: 14px;
+}
+
+.workflow-match-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.workflow-match-columns h4 {
+  margin-top: 0;
+}
+
+.workflow-job-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.workflow-career-summary {
+  margin-top: 8px;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+@media (max-width: 640px) {
+  .workflow-job-header {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-match-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-job-actions {
+    flex-direction: column;
+  }
+}
+
 /* Tablet */
 
 @media (max-width: 980px) {

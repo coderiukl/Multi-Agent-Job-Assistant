@@ -145,6 +145,8 @@ function normalizeConversationResponse(responseBody) {
     confidence: typeof intent?.confidence === "number" ? intent.confidence : null,
     cvId: data?.cv_id ?? null,
     missingInputs: Array.isArray(data?.missing_inputs) ? data.missing_inputs : [],
+    workflow: normalizeWorkflow(data?.workflow),
+    workflowJobMatches: Array.isArray(data?.workflow_job_matches) ? data.workflow_job_matches.map(normalizeWorkflowJobMatch) : [],
     cvAnalysisResult: data?.cv_analysis_result ? normalizeCvAnalysisResult(data.cv_analysis_result) : null,
     careerAdviceResult: data?.career_advice_result ? normalizeCareerAdviceResult(data.career_advice_result) : null,
     coverLetterResult: data?.cover_letter_result ? normalizeCoverLetterResult(data.cover_letter_result) : null,
@@ -152,6 +154,32 @@ function normalizeConversationResponse(responseBody) {
     jobMatchingResult: data?.job_matching_result
       ? normalizeJobMatchingResult(data.job_matching_result)
       : null,
+  };
+}
+
+function normalizeWorkflow(data) {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  return {
+    workflowType:
+      data.workflow_type ?? "single_agent",
+
+    steps: Array.isArray(data.steps) ? data.steps : [],
+
+    currentStep:
+      data.current_step ?? null,
+
+    completedSteps: Array.isArray(data.completed_steps) ? data.completed_steps : [],
+  };
+}
+
+function normalizeWorkflowJobMatch(data) {
+  return {
+    job: data?.job ?? {},
+
+    match: data?.match ? normalizeJobMatchingResult(data.match) : null,
   };
 }
 

@@ -10,8 +10,6 @@ from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.agents import CVParserAgent, JobSearchAgent, JobMatchingAgent, CVAnalysisAgent
-
 from app.core.config import get_settings
 from app.database import JobSessionFactory, create_job_database_engine, create_job_session_factory
 from app.embeddings import EmbeddingFactory
